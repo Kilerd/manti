@@ -16,6 +16,7 @@ COPY Cargo.toml Cargo.lock ./
 # Copy source code
 COPY src ./src
 COPY migrations ./migrations
+COPY config ./config
 
 # Build the application
 RUN cargo build --release
@@ -36,6 +37,7 @@ COPY --from=builder /app/target/release/manti /app/manti
 
 # Copy migrations
 COPY --from=builder /app/migrations /app/migrations
+COPY --from=builder /app/config /app/config
 
 # Create non-root user
 RUN useradd -m -u 1001 manti && chown -R manti:manti /app
