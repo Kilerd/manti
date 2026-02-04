@@ -78,7 +78,7 @@ impl ProviderRegistry {
     /// Remove a provider
     pub fn unregister(&self, name: &str) {
         let mut providers = self.providers.write().unwrap();
-        if let Some(provider) = providers.remove(name) {
+        if providers.remove(name).is_some() {
             // Clean up model map
             let mut model_map = self.model_map.write().unwrap();
             let models_to_remove: Vec<String> = model_map

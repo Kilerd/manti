@@ -38,3 +38,20 @@ pub enum MantiError {
 }
 
 pub type Result<T> = std::result::Result<T, MantiError>;
+
+impl MantiError {
+    pub fn to_status_code(&self) -> axum::http::StatusCode {
+        use axum::http::StatusCode;
+        match self {
+            MantiError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            MantiError::Config(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            MantiError::Auth(_) => StatusCode::UNAUTHORIZED,
+            MantiError::Provider(_) => StatusCode::BAD_GATEWAY,
+            MantiError::Billing(_) => StatusCode::PAYMENT_REQUIRED,
+            MantiError::Validation(_) => StatusCode::BAD_REQUEST,
+            MantiError::NotFound(_) => StatusCode::NOT_FOUND,
+            MantiError::RateLimitExceeded => StatusCode::TOO_MANY_REQUESTS,
+            MantiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
