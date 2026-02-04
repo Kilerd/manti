@@ -1,0 +1,22 @@
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[database]
+url = "postgres://postgres:postgres@localhost/manti"
+max_connections = 10
+
+[auth]
+jwt_secret = "change-me-in-production"
+jwt_expiration = 86400  # 24 hours
+
+[providers]
+# Configure your LLM providers here
+# Example:
+# [providers.openai]
+# api_key = "sk-..."
+# base_url = "https://api.openai.com/v1"
+
+# [providers.anthropic]
+# api_key = "sk-ant-..."
+# base_url = "https://api.anthropic.com"
