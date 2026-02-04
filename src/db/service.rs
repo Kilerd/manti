@@ -3,6 +3,7 @@ use crate::models::{
     usage::{Usage, CreateUsage},
     user::{User, CreateUser},
     provider_config::{ProviderConfig, CreateProviderConfig, UsageStats, ModelUsageStats, ProviderUsageStats},
+    model::{Model, CreateModel},
 };
 use chrono::{DateTime, Utc};
 use conservator::{Creatable, Domain, Executor, Migrator, PooledConnection};
@@ -228,21 +229,50 @@ impl DatabaseService {
             .map_err(|e| crate::MantiError::Database(e))
     }
 
-    /// List provider configs for a specific user
-    pub async fn list_provider_configs(&self, user_id: Uuid) -> crate::Result<Vec<ProviderConfig>> {
-        ProviderConfig::select()
-            .filter(ProviderConfig::COLUMNS.user_id.eq(user_id))
-            .order_by(ProviderConfig::COLUMNS.priority.desc())
-            .order_by(ProviderConfig::COLUMNS.created_at.desc())
-            .all(&*self.pool)
+    /// List provider configs accessible by the given user groups
+    /// Returns providers where allowed_groups is empty (public) or has intersection with user_groups
+    pub async fn list_providers_for_groups(&self, user_groups: &[String]) -> crate::Result<Vec<ProviderConfig>> {
+        let conn = self.pool.get().await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        // Query providers where allowed_groups is empty OR overlaps with user_groups
+        let query = r#"
+            SELECT * FROM provider_configs
+            WHERE is_active = true
+              AND (allowed_groups = '{}' OR allowed_groups && $1)
+            ORDER BY priority DESC, created_at DESC
+        "#;
+
+        let rows = conn
+            .query(query, &[&user_groups])
             .await
-            .map_err(|e| crate::MantiError::Database(e))
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        let configs: Vec<ProviderConfig> = rows
+            .iter()
+            .map(|row| ProviderConfig {
+                id: row.get("id"),
+                provider_type: row.get("provider_type"),
+                name: row.get("name"),
+                api_key_encrypted: row.get("api_key_encrypted"),
+                base_url: row.get("base_url"),
+                priority: row.get("priority"),
+                is_active: row.get("is_active"),
+                rate_limit: row.get("rate_limit"),
+                monthly_quota: row.get("monthly_quota"),
+                used_quota: row.get("used_quota"),
+                allowed_groups: row.get("allowed_groups"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            })
+            .collect();
+
+        Ok(configs)
     }
 
     /// List all provider configs (admin only)
     pub async fn list_all_provider_configs(&self) -> crate::Result<Vec<ProviderConfig>> {
         ProviderConfig::select()
-            .order_by(ProviderConfig::COLUMNS.user_id.asc())
             .order_by(ProviderConfig::COLUMNS.priority.desc())
             .order_by(ProviderConfig::COLUMNS.created_at.desc())
             .all(&*self.pool)
@@ -270,6 +300,7 @@ impl DatabaseService {
         is_active: Option<bool>,
         rate_limit: Option<Option<i32>>,
         monthly_quota: Option<Option<f64>>,
+        allowed_groups: Option<Vec<String>>,
     ) -> crate::Result<ProviderConfig> {
         // Fetch the current config, then update it
         let mut config = ProviderConfig::fetch_one_by_pk(&id, &*self.pool)
@@ -298,6 +329,9 @@ impl DatabaseService {
         if let Some(quota) = monthly_quota {
             config.monthly_quota = quota;
         }
+        if let Some(groups) = allowed_groups {
+            config.allowed_groups = groups;
+        }
 
         config.updated_at = Utc::now();
 
@@ -309,25 +343,180 @@ impl DatabaseService {
         Ok(config)
     }
 
-    /// Delete provider config
-    pub async fn delete_provider_config(&self, id: Uuid, user_id: Uuid) -> crate::Result<()> {
-        // First verify it belongs to the user, then delete
-        let config = ProviderConfig::select()
-            .filter(
-                ProviderConfig::COLUMNS.id.eq(id)
-                    & ProviderConfig::COLUMNS.user_id.eq(user_id)
-            )
-            .optional(&*self.pool)
+    /// Delete provider config (admin only, no user_id check needed)
+    pub async fn delete_provider_config(&self, id: Uuid) -> crate::Result<()> {
+        ProviderConfig::delete_by_pk(&id, &*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
-        if let Some(_) = config {
-            ProviderConfig::delete_by_pk(&id, &*self.pool)
-                .await
-                .map_err(|e| crate::MantiError::Database(e))?;
+        Ok(())
+    }
+
+    // Model operations
+
+    /// Create a new model under a provider
+    pub async fn create_model(&self, create_model: CreateModel) -> crate::Result<Model> {
+        let model_id = create_model
+            .insert::<Model>()
+            .returning_pk(&*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Model::fetch_one_by_pk(&model_id, &*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))
+    }
+
+    /// List models for a provider
+    pub async fn list_models_for_provider(&self, provider_config_id: Uuid) -> crate::Result<Vec<Model>> {
+        Model::select()
+            .filter(Model::COLUMNS.provider_config_id.eq(provider_config_id))
+            .order_by(Model::COLUMNS.model_id.asc())
+            .all(&*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))
+    }
+
+    /// List all active models accessible by user groups
+    pub async fn list_models_for_groups(&self, user_groups: &[String]) -> crate::Result<Vec<Model>> {
+        let conn = self.pool.get().await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        // Query models where the associated provider is active and accessible
+        let query = r#"
+            SELECT m.* FROM models m
+            INNER JOIN provider_configs p ON m.provider_config_id = p.id
+            WHERE m.is_active = true
+              AND p.is_active = true
+              AND (p.allowed_groups = '{}' OR p.allowed_groups && $1)
+            ORDER BY p.priority DESC, m.model_id ASC
+        "#;
+
+        let rows = conn
+            .query(query, &[&user_groups])
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        let models: Vec<Model> = rows
+            .iter()
+            .map(|row| Model {
+                id: row.get("id"),
+                provider_config_id: row.get("provider_config_id"),
+                model_id: row.get("model_id"),
+                display_name: row.get("display_name"),
+                input_cost_per_1k: row.get("input_cost_per_1k"),
+                output_cost_per_1k: row.get("output_cost_per_1k"),
+                max_context: row.get("max_context"),
+                supports_tools: row.get("supports_tools"),
+                supports_vision: row.get("supports_vision"),
+                is_active: row.get("is_active"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            })
+            .collect();
+
+        Ok(models)
+    }
+
+    /// Get a model by ID
+    pub async fn get_model(&self, id: Uuid) -> crate::Result<Option<Model>> {
+        match Model::fetch_one_by_pk(&id, &*self.pool).await {
+            Ok(model) => Ok(Some(model)),
+            Err(conservator::Error::TooManyRows(0)) => Ok(None),
+            Err(e) => Err(crate::MantiError::Database(e)),
+        }
+    }
+
+    /// Get a model by model_id string (e.g., "gpt-4o")
+    pub async fn get_model_by_model_id(&self, model_id: &str) -> crate::Result<Option<Model>> {
+        Model::select()
+            .filter(Model::COLUMNS.model_id.eq(model_id.to_string()))
+            .optional(&*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))
+    }
+
+    /// Update a model
+    pub async fn update_model(
+        &self,
+        id: Uuid,
+        display_name: Option<Option<String>>,
+        input_cost_per_1k: Option<Option<f64>>,
+        output_cost_per_1k: Option<Option<f64>>,
+        max_context: Option<Option<i32>>,
+        supports_tools: Option<bool>,
+        supports_vision: Option<bool>,
+        is_active: Option<bool>,
+    ) -> crate::Result<Model> {
+        let mut model = Model::fetch_one_by_pk(&id, &*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        if let Some(name) = display_name {
+            model.display_name = name;
+        }
+        if let Some(cost) = input_cost_per_1k {
+            model.input_cost_per_1k = cost;
+        }
+        if let Some(cost) = output_cost_per_1k {
+            model.output_cost_per_1k = cost;
+        }
+        if let Some(ctx) = max_context {
+            model.max_context = ctx;
+        }
+        if let Some(tools) = supports_tools {
+            model.supports_tools = tools;
+        }
+        if let Some(vision) = supports_vision {
+            model.supports_vision = vision;
+        }
+        if let Some(active) = is_active {
+            model.is_active = active;
         }
 
+        model.updated_at = Utc::now();
+
+        model.save(&*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Ok(model)
+    }
+
+    /// Delete a model
+    pub async fn delete_model(&self, id: Uuid) -> crate::Result<()> {
+        Model::delete_by_pk(&id, &*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
         Ok(())
+    }
+
+    // User group operations
+
+    /// Update user groups
+    pub async fn update_user_groups(&self, user_id: Uuid, user_groups: Vec<String>) -> crate::Result<User> {
+        let mut user = User::fetch_one_by_pk(&user_id, &*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        user.user_groups = user_groups;
+        user.updated_at = Utc::now();
+
+        user.save(&*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Ok(user)
+    }
+
+    /// List all users (admin only)
+    pub async fn list_all_users(&self) -> crate::Result<Vec<User>> {
+        User::select()
+            .order_by(User::COLUMNS.created_at.desc())
+            .all(&*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     /// Get usage statistics for a user
@@ -349,19 +538,19 @@ impl DatabaseService {
             ),
             totals AS (
                 SELECT
-                    COUNT(*) as total_requests,
-                    COALESCE(SUM(total_tokens), 0) as total_tokens,
-                    COALESCE(SUM(cost), 0.0) as total_cost
+                    COUNT(*)::bigint as total_requests,
+                    COALESCE(SUM(total_tokens), 0)::bigint as total_tokens,
+                    COALESCE(SUM(cost), 0.0)::float8 as total_cost
                 FROM filtered_usage
             ),
             by_model AS (
                 SELECT
                     model,
-                    COUNT(*) as requests,
-                    COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
-                    COALESCE(SUM(completion_tokens), 0) as completion_tokens,
-                    COALESCE(SUM(total_tokens), 0) as total_tokens,
-                    COALESCE(SUM(cost), 0.0) as cost
+                    COUNT(*)::bigint as requests,
+                    COALESCE(SUM(prompt_tokens), 0)::bigint as prompt_tokens,
+                    COALESCE(SUM(completion_tokens), 0)::bigint as completion_tokens,
+                    COALESCE(SUM(total_tokens), 0)::bigint as total_tokens,
+                    COALESCE(SUM(cost), 0.0)::float8 as cost
                 FROM filtered_usage
                 GROUP BY model
                 ORDER BY cost DESC
@@ -419,9 +608,9 @@ impl DatabaseService {
         let provider_query = r#"
             SELECT
                 provider,
-                COUNT(*) as requests,
-                COALESCE(SUM(total_tokens), 0) as total_tokens,
-                COALESCE(SUM(cost), 0.0) as cost
+                COUNT(*)::bigint as requests,
+                COALESCE(SUM(total_tokens), 0)::bigint as total_tokens,
+                COALESCE(SUM(cost), 0.0)::float8 as cost
             FROM usage
             WHERE user_id = $1 AND created_at >= $2 AND created_at <= $3
             GROUP BY provider

@@ -6,6 +6,7 @@ use axum::{
 };
 use futures::stream::Stream;
 use futures::StreamExt;
+use tower_http::cors::{Any, CorsLayer};
 use manti::{
     api::routes::create_router,
     config::Settings,
@@ -201,8 +202,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/models", get(list_models));
 
+    // CORS layer - allow all origins
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     // Merge all routes
-    let app = api_router.merge(llm_router);
+    let app = api_router.merge(llm_router).layer(cors);
 
     // Start server
     let listener = TcpListener::bind(&addr).await?;

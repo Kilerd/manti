@@ -17,17 +17,18 @@ pub struct User {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_login: Option<DateTime<Utc>>,
+    pub user_groups: Vec<String>,
 }
 
 /// DTO for creating new users
 #[derive(Debug, Clone, Creatable)]
 pub struct CreateUser {
-    pub id: Uuid,
     pub email: String,
     pub username: String,
     pub password_hash: String,
     pub is_active: bool,
     pub is_admin: bool,
+    pub user_groups: Vec<String>,
 }
 
 impl CreateUser {
@@ -36,12 +37,12 @@ impl CreateUser {
         let password_hash = hash_password(password)?;
 
         Ok(Self {
-            id: Uuid::new_v4(),
             email,
             username,
             password_hash,
             is_active: true,
             is_admin,
+            user_groups: vec!["default".to_string()],
         })
     }
 }
@@ -61,6 +62,7 @@ impl User {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             last_login: None,
+            user_groups: vec!["default".to_string()],
         })
     }
 
@@ -73,6 +75,17 @@ impl User {
     pub fn update_last_login(&mut self) {
         self.last_login = Some(Utc::now());
         self.updated_at = Utc::now();
+    }
+
+    /// Check if user belongs to a specific group
+    pub fn has_group(&self, group: &str) -> bool {
+        self.user_groups.contains(&group.to_string())
+    }
+
+    /// Check if user has access based on allowed groups
+    /// Returns true if allowed_groups is empty (public) or has intersection with user's groups
+    pub fn has_access(&self, allowed_groups: &[String]) -> bool {
+        allowed_groups.is_empty() || allowed_groups.iter().any(|g| self.user_groups.contains(g))
     }
 }
 
@@ -136,6 +149,7 @@ pub struct UserInfo {
     pub username: String,
     pub is_admin: bool,
     pub created_at: DateTime<Utc>,
+    pub user_groups: Vec<String>,
 }
 
 impl From<User> for UserInfo {
@@ -146,6 +160,13 @@ impl From<User> for UserInfo {
             username: user.username,
             is_admin: user.is_admin,
             created_at: user.created_at,
+            user_groups: user.user_groups,
         }
     }
+}
+
+/// Request to update user groups
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateUserGroupsRequest {
+    pub user_groups: Vec<String>,
 }

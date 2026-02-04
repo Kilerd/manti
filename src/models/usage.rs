@@ -26,7 +26,6 @@ pub struct Usage {
 /// DTO for creating usage records
 #[derive(Debug, Clone, Creatable)]
 pub struct CreateUsage {
-    pub id: Uuid,
     pub user_id: Uuid,
     pub api_key_id: Option<Uuid>,
     pub model: String,
@@ -50,7 +49,6 @@ impl CreateUsage {
         cost: f64,
     ) -> Self {
         Self {
-            id: Uuid::new_v4(),
             user_id,
             api_key_id,
             model,

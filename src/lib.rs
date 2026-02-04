@@ -12,22 +12,22 @@ use tracing::{error, info};
 
 use crate::db::DatabaseService;
 use crate::models::provider_config::ProviderConfig as DbProviderConfig;
-use crate::providers::{model_registry::ModelRegistry, ProviderConfig, ProviderType};
+use crate::providers::{model_registry::ModelRegistry, ModelConfig, ProviderConfig, ProviderType};
 
 /// Global model registry
 pub static MODEL_REGISTRY: Lazy<Arc<ModelRegistry>> =
     Lazy::new(|| Arc::new(ModelRegistry::new()));
 
-/// Reload all providers from database
+/// Reload all providers and models from database
 pub async fn reload_providers(db: &DatabaseService, jwt_secret: &str) -> Result<usize> {
-    // Clear existing providers
+    // Clear existing providers and models
     MODEL_REGISTRY.clear();
 
-    // Load from database
+    // Load providers from database
     let provider_configs = db.list_all_provider_configs().await?;
-    let mut loaded = 0;
+    let mut provider_count = 0;
 
-    for db_config in provider_configs {
+    for db_config in &provider_configs {
         if !db_config.is_active {
             continue;
         }
@@ -58,15 +58,63 @@ pub async fn reload_providers(db: &DatabaseService, jwt_secret: &str) -> Result<
                 organization: None,
                 extra_params: Default::default(),
             },
+            db_config.id,
+            db_config.allowed_groups.clone(),
         ) {
             error!("Failed to register provider '{}': {}", db_config.name, e);
         } else {
             info!("Registered {} provider: {}", db_config.provider_type, db_config.name);
-            loaded += 1;
+            provider_count += 1;
         }
     }
 
-    Ok(loaded)
+    // Load models from database and register them
+    let mut model_count = 0;
+    for db_config in &provider_configs {
+        if !db_config.is_active {
+            continue;
+        }
+
+        // Get models for this provider
+        let models = match db.list_models_for_provider(db_config.id).await {
+            Ok(models) => models,
+            Err(e) => {
+                error!("Failed to load models for provider '{}': {}", db_config.name, e);
+                continue;
+            }
+        };
+
+        for model in models {
+            if !model.is_active {
+                continue;
+            }
+
+            let model_config = ModelConfig {
+                id: model.model_id.clone(),
+                provider: db_config.name.clone(),
+                input_cost_per_1k: model.input_cost_per_1k.unwrap_or(0.0),
+                output_cost_per_1k: model.output_cost_per_1k.unwrap_or(0.0),
+                max_context: model.max_context.unwrap_or(4096),
+                supports_tools: model.supports_tools,
+                supports_vision: model.supports_vision,
+            };
+
+            if let Err(e) = MODEL_REGISTRY.register_model(
+                &db_config.name,
+                model_config,
+                db_config.id,
+                db_config.allowed_groups.clone(),
+            ) {
+                error!("Failed to register model '{}': {}", model.model_id, e);
+            } else {
+                info!("Registered model: {} (provider: {})", model.model_id, db_config.name);
+                model_count += 1;
+            }
+        }
+    }
+
+    info!("Loaded {} provider(s) with {} model(s)", provider_count, model_count);
+    Ok(model_count)
 }
 
 #[derive(Error, Debug)]

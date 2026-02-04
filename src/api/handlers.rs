@@ -25,7 +25,7 @@ use uuid::Uuid;
 pub async fn register(
     State(db): State<Arc<DatabaseService>>,
     Json(req): Json<CreateUserRequest>,
-) -> Result<Json<UserInfo>, StatusCode> {
+) -> Result<Json<LoginResponse>, StatusCode> {
     // Validate email format
     if !req.email.contains('@') {
         return Err(StatusCode::BAD_REQUEST);
@@ -46,7 +46,16 @@ pub async fn register(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(saved_user.into()))
+    // Generate JWT token for immediate login
+    let jwt_config = JwtConfig::from_env();
+    let token = jwt_config
+        .generate_token(&saved_user)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(LoginResponse {
+        token,
+        user: saved_user.into(),
+    }))
 }
 
 /// Login with email and password
@@ -91,6 +100,91 @@ pub async fn get_current_user(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(user.into()))
+}
+
+/// Validate token response
+#[derive(serde::Serialize)]
+pub struct ValidateTokenResponse {
+    pub user: UserInfo,
+}
+
+/// Validate token - returns user info if token is valid
+pub async fn validate_token(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Arc<DatabaseService>>,
+) -> Result<Json<ValidateTokenResponse>, StatusCode> {
+    let user = db
+        .find_user_by_id(auth.user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(ValidateTokenResponse {
+        user: user.into(),
+    }))
+}
+
+/// Logout - invalidate token (stateless, just returns success)
+pub async fn logout() -> Result<Json<serde_json::Value>, StatusCode> {
+    // JWT is stateless, so logout is handled client-side by removing the token
+    Ok(Json(json!({ "message": "Logged out successfully" })))
+}
+
+/// Refresh token request
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshTokenRequest {
+    pub refresh_token: String,
+}
+
+/// Refresh token - generate new access token
+pub async fn refresh_token(
+    State(db): State<Arc<DatabaseService>>,
+    Json(req): Json<RefreshTokenRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // Verify and decode the refresh token
+    let jwt_config = JwtConfig::from_env();
+    let claims = jwt_config
+        .verify_token(&req.refresh_token)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // Find the user
+    let user = db
+        .find_user_by_id(claims.sub)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    // Generate new token
+    let token = jwt_config
+        .generate_token(&user)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(json!({ "token": token })))
+}
+
+/// Update profile request
+#[derive(Deserialize)]
+pub struct UpdateProfileRequest {
+    pub username: Option<String>,
+}
+
+/// Update user profile
+pub async fn update_profile(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Arc<DatabaseService>>,
+    Json(_req): Json<UpdateProfileRequest>,
+) -> Result<Json<UserInfo>, StatusCode> {
+    // For now, just return current user - profile update can be implemented later
+    let user = db
+        .find_user_by_id(auth.user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // TODO: Implement actual profile update when needed
 
     Ok(Json(user.into()))
 }
@@ -200,6 +294,46 @@ pub async fn get_usage(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(usage))
+}
+
+/// Dashboard stats response
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardStats {
+    pub total_requests: i64,
+    pub total_tokens: i64,
+    pub total_cost: f64,
+    pub active_keys: i64,
+}
+
+/// Get dashboard stats for the authenticated user
+pub async fn get_usage_stats(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Arc<DatabaseService>>,
+) -> Result<Json<DashboardStats>, StatusCode> {
+    // Get usage stats for last 30 days
+    let end = Utc::now();
+    let start = end - Duration::days(30);
+
+    let usage_stats = db
+        .get_usage_stats(auth.user_id, start, end)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Count active API keys
+    let api_keys = db
+        .list_user_api_keys(auth.user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let active_keys = api_keys.iter().filter(|k| k.is_active && k.is_valid()).count() as i64;
+
+    Ok(Json(DashboardStats {
+        total_requests: usage_stats.total_requests,
+        total_tokens: usage_stats.total_tokens,
+        total_cost: usage_stats.total_cost,
+        active_keys,
+    }))
 }
 
 /// Health check endpoint (no auth required)

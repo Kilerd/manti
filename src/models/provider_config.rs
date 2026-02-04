@@ -6,12 +6,12 @@ use uuid::Uuid;
 // Supported provider types
 pub const SUPPORTED_PROVIDERS: &[&str] = &["openai", "anthropic", "google"];
 
+/// Global provider configuration (no longer user-specific)
 #[derive(Debug, Clone, Serialize, Deserialize, Domain)]
 #[domain(table = "provider_configs")]
 pub struct ProviderConfig {
     #[domain(primary_key)]
     pub id: Uuid,
-    pub user_id: Uuid,
     pub provider_type: String,
     pub name: String,
     pub api_key_encrypted: String,
@@ -21,6 +21,7 @@ pub struct ProviderConfig {
     pub rate_limit: Option<i32>,
     pub monthly_quota: Option<f64>,
     pub used_quota: f64,
+    pub allowed_groups: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -28,8 +29,6 @@ pub struct ProviderConfig {
 /// DTO for creating provider configurations
 #[derive(Debug, Clone, Creatable)]
 pub struct CreateProviderConfig {
-    pub id: Uuid,
-    pub user_id: Uuid,
     pub provider_type: String,
     pub name: String,
     pub api_key_encrypted: String,
@@ -39,11 +38,11 @@ pub struct CreateProviderConfig {
     pub rate_limit: Option<i32>,
     pub monthly_quota: Option<f64>,
     pub used_quota: f64,
+    pub allowed_groups: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateProviderConfigRequest {
-    pub user_id: Option<Uuid>, // Optional, defaults to current user
     pub provider_type: String,  // "openai", "anthropic", "google", etc.
     pub name: String,
     pub api_key: String, // Plain text, will be encrypted
@@ -51,6 +50,7 @@ pub struct CreateProviderConfigRequest {
     pub priority: Option<i32>,
     pub rate_limit: Option<i32>,
     pub monthly_quota: Option<f64>,
+    pub allowed_groups: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,12 +62,12 @@ pub struct UpdateProviderConfigRequest {
     pub is_active: Option<bool>,
     pub rate_limit: Option<i32>,
     pub monthly_quota: Option<f64>,
+    pub allowed_groups: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ProviderConfigInfo {
     pub id: Uuid,
-    pub user_id: Uuid,
     pub provider_type: String,
     pub name: String,
     pub base_url: Option<String>,
@@ -76,6 +76,7 @@ pub struct ProviderConfigInfo {
     pub rate_limit: Option<i32>,
     pub monthly_quota: Option<f64>,
     pub used_quota: f64,
+    pub allowed_groups: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -84,7 +85,6 @@ impl From<ProviderConfig> for ProviderConfigInfo {
     fn from(config: ProviderConfig) -> Self {
         Self {
             id: config.id,
-            user_id: config.user_id,
             provider_type: config.provider_type,
             name: config.name,
             base_url: config.base_url,
@@ -93,6 +93,7 @@ impl From<ProviderConfig> for ProviderConfigInfo {
             rate_limit: config.rate_limit,
             monthly_quota: config.monthly_quota,
             used_quota: config.used_quota,
+            allowed_groups: config.allowed_groups,
             created_at: config.created_at,
             updated_at: config.updated_at,
         }
@@ -106,7 +107,6 @@ impl ProviderConfig {
     }
 
     pub fn new(
-        user_id: Uuid,
         provider_type: String,
         name: String,
         api_key_encrypted: String,
@@ -114,7 +114,6 @@ impl ProviderConfig {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
-            user_id,
             provider_type,
             name,
             api_key_encrypted,
@@ -124,6 +123,7 @@ impl ProviderConfig {
             rate_limit: None,
             monthly_quota: None,
             used_quota: 0.0,
+            allowed_groups: vec![],
             created_at: now,
             updated_at: now,
         }
