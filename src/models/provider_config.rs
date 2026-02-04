@@ -1,12 +1,15 @@
 use chrono::{DateTime, Utc};
+use conservator::{Domain, Creatable, Selectable};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 // Supported provider types
 pub const SUPPORTED_PROVIDERS: &[&str] = &["openai", "anthropic", "google"];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Domain)]
+#[domain(table = "provider_configs")]
 pub struct ProviderConfig {
+    #[domain(primary_key)]
     pub id: Uuid,
     pub user_id: Uuid,
     pub provider_type: String,
@@ -20,6 +23,22 @@ pub struct ProviderConfig {
     pub used_quota: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// DTO for creating provider configurations
+#[derive(Debug, Clone, Creatable)]
+#[creatable(domain = "ProviderConfig")]
+pub struct CreateProviderConfig {
+    pub user_id: Uuid,
+    pub provider_type: String,
+    pub name: String,
+    pub api_key_encrypted: String,
+    pub base_url: Option<String>,
+    pub priority: i32,
+    pub is_active: bool,
+    pub rate_limit: Option<i32>,
+    pub monthly_quota: Option<f64>,
+    pub used_quota: f64,
 }
 
 #[derive(Debug, Deserialize)]

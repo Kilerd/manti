@@ -1,11 +1,11 @@
 use crate::models::{
-    api_key::ApiKey,
-    usage::Usage,
-    user::User,
-    provider_config::{ProviderConfig, UsageStats, ModelUsageStats, ProviderUsageStats},
+    api_key::{ApiKey, CreateApiKey},
+    usage::{Usage, CreateUsage},
+    user::{User, CreateUser},
+    provider_config::{ProviderConfig, CreateProviderConfig, UsageStats, ModelUsageStats, ProviderUsageStats},
 };
 use chrono::{DateTime, Utc};
-use conservator::{Executor, PooledConnection};
+use conservator::{Creatable, Domain, Executor, Migrator, PooledConnection};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -27,96 +27,61 @@ impl DatabaseService {
 
     /// Run database migrations
     pub async fn migrate(&self) -> crate::Result<()> {
-        let conn = self.pool.get().await
+        let migrator = Migrator::from_path("./migrations")
+            .map_err(|e| crate::MantiError::Database(conservator::Error::Other(Box::new(e))))?;
+
+        let mut conn = self.pool.get().await
             .map_err(|e| crate::MantiError::Database(e))?;
 
-        // Read and execute migration files
-        let migrations = vec![
-            include_str!("../../migrations/001_initial.sql"),
-            include_str!("../../migrations/002_auth.sql"),
-        ];
+        migrator.run(&mut conn).await
+            .map_err(|e| crate::MantiError::Database(conservator::Error::Other(Box::new(e))))?;
 
-        for (i, migration) in migrations.iter().enumerate() {
-            conn.execute(migration, &[]).await
-                .map_err(|e| crate::MantiError::Database(e))?;
-            tracing::info!("Applied migration {}", i + 1);
-        }
-
+        tracing::info!("Migrations completed successfully");
         Ok(())
     }
 
     // User operations
 
     /// Create a new user
-    pub async fn create_user(&self, user: &User) -> crate::Result<User> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = r#"
-            INSERT INTO users (id, email, username, password_hash, is_active, is_admin, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING *
-        "#;
-
-        let row = conn
-            .query_one(
-                query,
-                &[
-                    &user.id,
-                    &user.email,
-                    &user.username,
-                    &user.password_hash,
-                    &user.is_active,
-                    &user.is_admin,
-                    &user.created_at,
-                    &user.updated_at,
-                ],
-            )
+    pub async fn create_user(&self, create_user: CreateUser) -> crate::Result<User> {
+        let user_id = create_user
+            .insert::<User>()
+            .returning_pk(&*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
-        Ok(row_to_user(&row))
+        User::fetch_one_by_pk(&user_id, &*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     /// Find a user by email
     pub async fn find_user_by_email(&self, email: &str) -> crate::Result<Option<User>> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "SELECT * FROM users WHERE email = $1";
-
-        let row = conn
-            .query_opt(query, &[&email])
+        User::select()
+            .filter(User::COLUMNS.email.eq(email.to_string()))
+            .optional(&*self.pool)
             .await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        Ok(row.map(|r| row_to_user(&r)))
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     /// Find a user by ID
     pub async fn find_user_by_id(&self, id: Uuid) -> crate::Result<Option<User>> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "SELECT * FROM users WHERE id = $1";
-
-        let row = conn
-            .query_opt(query, &[&id])
-            .await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        Ok(row.map(|r| row_to_user(&r)))
+        match User::fetch_one_by_pk(&id, &*self.pool).await {
+            Ok(user) => Ok(Some(user)),
+            Err(conservator::Error::TooManyRows(0)) => Ok(None),
+            Err(e) => Err(crate::MantiError::Database(e)),
+        }
     }
 
     /// Update user last login
     pub async fn update_user_last_login(&self, user_id: Uuid) -> crate::Result<()> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "UPDATE users SET last_login = $1, updated_at = $2 WHERE id = $3";
         let now = Utc::now();
 
-        conn.execute(query, &[&now, &now, &user_id])
+        User::update()
+            .set(User::COLUMNS.last_login, Some(now))
+            .set(User::COLUMNS.updated_at, now)
+            .filter(User::COLUMNS.id.eq(user_id))
+            .execute(&*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
@@ -126,43 +91,16 @@ impl DatabaseService {
     // API Key operations
 
     /// Create a new API key
-    pub async fn create_api_key(&self, api_key: &ApiKey) -> crate::Result<ApiKey> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = r#"
-            INSERT INTO api_keys (
-                id, user_id, name, key_hash, prefix, is_active,
-                expires_at, created_at, updated_at, rate_limit_rpm, allowed_models
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            RETURNING *
-        "#;
-
-        let allowed_models_json = api_key.allowed_models.as_ref()
-            .map(|models| serde_json::to_value(models).unwrap());
-
-        let row = conn
-            .query_one(
-                query,
-                &[
-                    &api_key.id,
-                    &api_key.user_id,
-                    &api_key.name,
-                    &api_key.key_hash,
-                    &api_key.prefix,
-                    &api_key.is_active,
-                    &api_key.expires_at,
-                    &api_key.created_at,
-                    &api_key.updated_at,
-                    &api_key.rate_limit_rpm,
-                    &allowed_models_json,
-                ],
-            )
+    pub async fn create_api_key(&self, create_api_key: CreateApiKey) -> crate::Result<ApiKey> {
+        let api_key_id = create_api_key
+            .insert::<ApiKey>()
+            .returning_pk(&*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
-        Ok(row_to_api_key(&row))
+        ApiKey::fetch_one_by_pk(&api_key_id, &*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     /// Find an API key by its prefix and verify with hash
@@ -170,19 +108,16 @@ impl DatabaseService {
         // Extract prefix for faster lookup
         let prefix = key.chars().take(8).collect::<String>();
 
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "SELECT * FROM api_keys WHERE prefix = $1 AND is_active = true";
-
-        let row = conn
-            .query_opt(query, &[&prefix])
+        let api_key = ApiKey::select()
+            .filter(
+                ApiKey::COLUMNS.prefix.eq(prefix)
+                    & ApiKey::COLUMNS.is_active.eq(true)
+            )
+            .optional(&*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
-        if let Some(row) = row {
-            let api_key = row_to_api_key(&row);
-
+        if let Some(api_key) = api_key {
             // Verify the full key
             if api_key.verify(key) && api_key.is_valid() {
                 Ok(Some(api_key))
@@ -196,43 +131,35 @@ impl DatabaseService {
 
     /// Find an API key by prefix (for identifying which key was used)
     pub async fn find_api_key_by_prefix(&self, prefix: &str) -> crate::Result<Option<ApiKey>> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "SELECT * FROM api_keys WHERE prefix = $1 AND is_active = true";
-
-        let row = conn
-            .query_opt(query, &[&prefix])
+        ApiKey::select()
+            .filter(
+                ApiKey::COLUMNS.prefix.eq(prefix.to_string())
+                    & ApiKey::COLUMNS.is_active.eq(true)
+            )
+            .optional(&*self.pool)
             .await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        Ok(row.map(|r| row_to_api_key(&r)))
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     /// List all API keys for a user
     pub async fn list_user_api_keys(&self, user_id: Uuid) -> crate::Result<Vec<ApiKey>> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "SELECT * FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC";
-
-        let rows = conn
-            .query(query, &[&user_id])
+        ApiKey::select()
+            .filter(ApiKey::COLUMNS.user_id.eq(user_id))
+            .order_by(ApiKey::COLUMNS.created_at.desc())
+            .all(&*self.pool)
             .await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        Ok(rows.iter().map(|r| row_to_api_key(r)).collect())
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     /// Update API key last used
     pub async fn update_api_key_last_used(&self, api_key_id: Uuid) -> crate::Result<()> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "UPDATE api_keys SET last_used = $1, updated_at = $2 WHERE id = $3";
         let now = Utc::now();
 
-        conn.execute(query, &[&now, &now, &api_key_id])
+        ApiKey::update()
+            .set(ApiKey::COLUMNS.last_used, Some(now))
+            .set(ApiKey::COLUMNS.updated_at, now)
+            .filter(ApiKey::COLUMNS.id.eq(api_key_id))
+            .execute(&*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
@@ -241,12 +168,14 @@ impl DatabaseService {
 
     /// Revoke an API key
     pub async fn revoke_api_key(&self, api_key_id: Uuid, user_id: Uuid) -> crate::Result<()> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "UPDATE api_keys SET is_active = false, updated_at = $1 WHERE id = $2 AND user_id = $3";
-
-        conn.execute(query, &[&Utc::now(), &api_key_id, &user_id])
+        ApiKey::update()
+            .set(ApiKey::COLUMNS.is_active, false)
+            .set(ApiKey::COLUMNS.updated_at, Utc::now())
+            .filter(
+                ApiKey::COLUMNS.id.eq(api_key_id)
+                    & ApiKey::COLUMNS.user_id.eq(user_id)
+            )
+            .execute(&*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
@@ -256,38 +185,13 @@ impl DatabaseService {
     // Usage operations
 
     /// Record API usage
-    pub async fn record_usage(&self, usage: &Usage) -> crate::Result<()> {
-        let conn = self.pool.get().await
+    pub async fn record_usage(&self, create_usage: CreateUsage) -> crate::Result<()> {
+        // Insert and ignore the returned ID
+        let _ = create_usage
+            .insert::<Usage>()
+            .returning_pk(&*self.pool)
+            .await
             .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = r#"
-            INSERT INTO usage (
-                id, user_id, api_key_id, model, provider,
-                prompt_tokens, completion_tokens, total_tokens,
-                cost, request_id, created_at, metadata
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        "#;
-
-        conn.execute(
-            query,
-            &[
-                &usage.id,
-                &usage.user_id,
-                &usage.api_key_id,
-                &usage.model,
-                &usage.provider,
-                &usage.prompt_tokens,
-                &usage.completion_tokens,
-                &usage.total_tokens,
-                &usage.cost,
-                &usage.request_id,
-                &usage.created_at,
-                &usage.metadata,
-            ],
-        )
-        .await
-        .map_err(|e| crate::MantiError::Database(e))?;
 
         Ok(())
     }
@@ -299,112 +203,65 @@ impl DatabaseService {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> crate::Result<Vec<Usage>> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = r#"
-            SELECT * FROM usage
-            WHERE user_id = $1 AND created_at >= $2 AND created_at <= $3
-            ORDER BY created_at DESC
-        "#;
-
-        let rows = conn
-            .query(query, &[&user_id, &start, &end])
+        Usage::select()
+            .filter(
+                Usage::COLUMNS.user_id.eq(user_id)
+                    & Usage::COLUMNS.created_at.gte(start)
+                    & Usage::COLUMNS.created_at.lte(end)
+            )
+            .order_by(Usage::COLUMNS.created_at.desc())
+            .all(&*self.pool)
             .await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        Ok(rows.iter().map(|r| row_to_usage(r)).collect())
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     // Provider configuration operations
 
     /// Create a new provider configuration
-    pub async fn create_provider_config(&self, config: &ProviderConfig) -> crate::Result<ProviderConfig> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = r#"
-            INSERT INTO provider_configs (
-                id, user_id, provider_type, name, api_key_encrypted,
-                base_url, priority, is_active, rate_limit, monthly_quota,
-                used_quota, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING *
-        "#;
-
-        let row = conn
-            .query_one(
-                query,
-                &[
-                    &config.id,
-                    &config.user_id,
-                    &config.provider_type,
-                    &config.name,
-                    &config.api_key_encrypted,
-                    &config.base_url,
-                    &config.priority,
-                    &config.is_active,
-                    &config.rate_limit,
-                    &config.monthly_quota,
-                    &config.used_quota,
-                    &config.created_at,
-                    &config.updated_at,
-                ],
-            )
+    pub async fn create_provider_config(&self, create_config: CreateProviderConfig) -> crate::Result<ProviderConfig> {
+        let config_id = create_config
+            .insert::<ProviderConfig>()
+            .returning_pk(&*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
-        Ok(row_to_provider_config(&row))
+        ProviderConfig::fetch_one_by_pk(&config_id, &*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     /// List provider configs for a specific user
     pub async fn list_provider_configs(&self, user_id: Uuid) -> crate::Result<Vec<ProviderConfig>> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "SELECT * FROM provider_configs WHERE user_id = $1 ORDER BY priority DESC, created_at DESC";
-
-        let rows = conn
-            .query(query, &[&user_id])
+        ProviderConfig::select()
+            .filter(ProviderConfig::COLUMNS.user_id.eq(user_id))
+            .order_by(ProviderConfig::COLUMNS.priority.desc())
+            .order_by(ProviderConfig::COLUMNS.created_at.desc())
+            .all(&*self.pool)
             .await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        Ok(rows.iter().map(|r| row_to_provider_config(r)).collect())
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     /// List all provider configs (admin only)
     pub async fn list_all_provider_configs(&self) -> crate::Result<Vec<ProviderConfig>> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "SELECT * FROM provider_configs ORDER BY user_id, priority DESC, created_at DESC";
-
-        let rows = conn
-            .query(query, &[])
+        ProviderConfig::select()
+            .order_by(ProviderConfig::COLUMNS.user_id.asc())
+            .order_by(ProviderConfig::COLUMNS.priority.desc())
+            .order_by(ProviderConfig::COLUMNS.created_at.desc())
+            .all(&*self.pool)
             .await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        Ok(rows.iter().map(|r| row_to_provider_config(r)).collect())
+            .map_err(|e| crate::MantiError::Database(e))
     }
 
     /// Get a provider config by ID
     pub async fn get_provider_config(&self, id: Uuid) -> crate::Result<Option<ProviderConfig>> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "SELECT * FROM provider_configs WHERE id = $1";
-
-        let row = conn
-            .query_opt(query, &[&id])
-            .await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        Ok(row.map(|r| row_to_provider_config(&r)))
+        match ProviderConfig::fetch_one_by_pk(&id, &*self.pool).await {
+            Ok(config) => Ok(Some(config)),
+            Err(conservator::Error::TooManyRows(0)) => Ok(None),
+            Err(e) => Err(crate::MantiError::Database(e)),
+        }
     }
 
-    /// Update provider config
-    /// Uses COALESCE to avoid race conditions by updating in a single query
+    /// Update provider config using builder pattern
     pub async fn update_provider_config(
         &self,
         id: Uuid,
@@ -416,70 +273,61 @@ impl DatabaseService {
         rate_limit: Option<Option<i32>>,
         monthly_quota: Option<Option<f64>>,
     ) -> crate::Result<ProviderConfig> {
-        let conn = self.pool.get().await
+        // Fetch the current config, then update it
+        let mut config = ProviderConfig::fetch_one_by_pk(&id, &*self.pool)
+            .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
-        // Use COALESCE to update only provided fields in a single atomic query
-        // This avoids race conditions from separate SELECT and UPDATE operations
-        let query = r#"
-            UPDATE provider_configs
-            SET name = COALESCE($1, name),
-                api_key_encrypted = COALESCE($2, api_key_encrypted),
-                base_url = CASE WHEN $3::boolean THEN $4 ELSE base_url END,
-                priority = COALESCE($5, priority),
-                is_active = COALESCE($6, is_active),
-                rate_limit = CASE WHEN $7::boolean THEN $8 ELSE rate_limit END,
-                monthly_quota = CASE WHEN $9::boolean THEN $10 ELSE monthly_quota END,
-                updated_at = NOW()
-            WHERE id = $11
-            RETURNING *
-        "#;
+        // Update fields that were provided
+        if let Some(n) = name {
+            config.name = n;
+        }
+        if let Some(key) = api_key_encrypted {
+            config.api_key_encrypted = key;
+        }
+        if let Some(url) = base_url {
+            config.base_url = url;
+        }
+        if let Some(p) = priority {
+            config.priority = p;
+        }
+        if let Some(active) = is_active {
+            config.is_active = active;
+        }
+        if let Some(limit) = rate_limit {
+            config.rate_limit = limit;
+        }
+        if let Some(quota) = monthly_quota {
+            config.monthly_quota = quota;
+        }
 
-        // For nullable fields, we need to track whether they were provided
-        // base_url: $3 = has_base_url, $4 = base_url value
-        // rate_limit: $7 = has_rate_limit, $8 = rate_limit value
-        // monthly_quota: $9 = has_monthly_quota, $10 = monthly_quota value
-        let has_base_url = base_url.is_some();
-        let base_url_value = base_url.flatten();
-        let has_rate_limit = rate_limit.is_some();
-        let rate_limit_value = rate_limit.flatten();
-        let has_monthly_quota = monthly_quota.is_some();
-        let monthly_quota_value = monthly_quota.flatten();
+        config.updated_at = Utc::now();
 
-        let row = conn
-            .query_opt(
-                query,
-                &[
-                    &name,
-                    &api_key_encrypted,
-                    &has_base_url,
-                    &base_url_value,
-                    &priority,
-                    &is_active,
-                    &has_rate_limit,
-                    &rate_limit_value,
-                    &has_monthly_quota,
-                    &monthly_quota_value,
-                    &id,
-                ],
-            )
+        // Save the updated config
+        config.save(&*self.pool)
             .await
-            .map_err(|e| crate::MantiError::Database(e))?
-            .ok_or_else(|| crate::MantiError::NotFound("Provider config not found".to_string()))?;
+            .map_err(|e| crate::MantiError::Database(e))?;
 
-        Ok(row_to_provider_config(&row))
+        Ok(config)
     }
 
     /// Delete provider config
     pub async fn delete_provider_config(&self, id: Uuid, user_id: Uuid) -> crate::Result<()> {
-        let conn = self.pool.get().await
-            .map_err(|e| crate::MantiError::Database(e))?;
-
-        let query = "DELETE FROM provider_configs WHERE id = $1 AND user_id = $2";
-
-        conn.execute(query, &[&id, &user_id])
+        // First verify it belongs to the user, then delete
+        let config = ProviderConfig::select()
+            .filter(
+                ProviderConfig::COLUMNS.id.eq(id)
+                    & ProviderConfig::COLUMNS.user_id.eq(user_id)
+            )
+            .optional(&*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
+
+        if let Some(_) = config {
+            ProviderConfig::delete_by_pk(&id, &*self.pool)
+                .await
+                .map_err(|e| crate::MantiError::Database(e))?;
+        }
 
         Ok(())
     }
@@ -605,78 +453,5 @@ impl DatabaseService {
             by_model,
             by_provider,
         })
-    }
-}
-
-// Helper functions to convert database rows to models
-
-fn row_to_user(row: &conservator::Row) -> User {
-    User {
-        id: row.get("id"),
-        email: row.get("email"),
-        username: row.get("username"),
-        password_hash: row.get("password_hash"),
-        is_active: row.get("is_active"),
-        is_admin: row.get("is_admin"),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
-        last_login: row.get("last_login"),
-    }
-}
-
-fn row_to_api_key(row: &conservator::Row) -> ApiKey {
-    let allowed_models: Option<serde_json::Value> = row.get("allowed_models");
-    let allowed_models = allowed_models.and_then(|v| {
-        serde_json::from_value::<Vec<String>>(v).ok()
-    });
-
-    ApiKey {
-        id: row.get("id"),
-        user_id: row.get("user_id"),
-        name: row.get("name"),
-        key_hash: row.get("key_hash"),
-        prefix: row.get("prefix"),
-        is_active: row.get("is_active"),
-        last_used: row.get("last_used"),
-        expires_at: row.get("expires_at"),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
-        rate_limit_rpm: row.get("rate_limit_rpm"),
-        allowed_models,
-    }
-}
-
-fn row_to_usage(row: &conservator::Row) -> Usage {
-    Usage {
-        id: row.get("id"),
-        user_id: row.get("user_id"),
-        api_key_id: row.get("api_key_id"),
-        model: row.get("model"),
-        provider: row.get("provider"),
-        prompt_tokens: row.get("prompt_tokens"),
-        completion_tokens: row.get("completion_tokens"),
-        total_tokens: row.get("total_tokens"),
-        cost: row.get("cost"),
-        request_id: row.get("request_id"),
-        created_at: row.get("created_at"),
-        metadata: row.get("metadata"),
-    }
-}
-
-fn row_to_provider_config(row: &conservator::Row) -> ProviderConfig {
-    ProviderConfig {
-        id: row.get("id"),
-        user_id: row.get("user_id"),
-        provider_type: row.get("provider_type"),
-        name: row.get("name"),
-        api_key_encrypted: row.get("api_key_encrypted"),
-        base_url: row.get("base_url"),
-        priority: row.get("priority"),
-        is_active: row.get("is_active"),
-        rate_limit: row.get("rate_limit"),
-        monthly_quota: row.get("monthly_quota"),
-        used_quota: row.get("used_quota"),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
     }
 }
