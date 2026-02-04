@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use conservator::{Domain, Creatable, Selectable};
+use conservator::{Domain, Creatable};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
@@ -25,7 +25,6 @@ pub struct ApiKey {
 
 /// DTO for creating new API keys
 #[derive(Debug, Clone, Creatable)]
-#[creatable(domain = "ApiKey")]
 pub struct CreateApiKey {
     pub user_id: Uuid,
     pub name: String,

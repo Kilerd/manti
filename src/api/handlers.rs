@@ -2,9 +2,9 @@ use crate::{
     auth::{AuthContext, JwtConfig},
     db::DatabaseService,
     models::{
-        api_key::{ApiKey, ApiKeyInfo, ApiKeyResponse, CreateApiKeyRequest},
+        api_key::{ApiKeyInfo, ApiKeyResponse, CreateApiKey, CreateApiKeyRequest},
         usage::Usage,
-        user::{CreateUserRequest, LoginRequest, LoginResponse, User, UserInfo},
+        user::{CreateUser, CreateUserRequest, LoginRequest, LoginResponse, UserInfo},
     },
 };
 use axum::{
@@ -37,12 +37,12 @@ pub async fn register(
     }
 
     // Create new user
-    let user = User::new(req.email, req.username, &req.password)
+    let create_user = CreateUser::new(req.email, req.username, &req.password, false)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Save to database
     let saved_user = db
-        .create_user(&user)
+        .create_user(create_user)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -103,24 +103,22 @@ pub async fn create_api_key(
     State(db): State<Arc<DatabaseService>>,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> Result<Json<ApiKeyResponse>, StatusCode> {
-    // Generate new API key
-    let (mut api_key, raw_key) = ApiKey::generate(auth.user_id, req.name)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Calculate expires_at from expires_in_days
+    let expires_at = req.expires_in_days.map(|days| Utc::now() + Duration::days(days));
 
-    // Set optional parameters
-    if let Some(days) = req.expires_in_days {
-        api_key.expires_at = Some(Utc::now() + Duration::days(days));
-    }
-    if let Some(rpm) = req.rate_limit_rpm {
-        api_key.rate_limit_rpm = Some(rpm);
-    }
-    if let Some(models) = req.allowed_models {
-        api_key.allowed_models = Some(models);
-    }
+    // Generate new API key using CreateApiKey
+    let (create_api_key, raw_key) = CreateApiKey::generate(
+        auth.user_id,
+        req.name,
+        expires_at,
+        req.rate_limit_rpm,
+        req.allowed_models,
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Save to database
     let saved_key = db
-        .create_api_key(&api_key)
+        .create_api_key(create_api_key)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -146,16 +144,19 @@ pub async fn list_api_keys(
 
     let key_infos: Vec<ApiKeyInfo> = keys
         .into_iter()
-        .map(|k| ApiKeyInfo {
-            id: k.id,
-            name: k.name,
-            prefix: k.prefix,
-            is_active: k.is_active,
-            last_used: k.last_used,
-            expires_at: k.expires_at,
-            created_at: k.created_at,
-            rate_limit_rpm: k.rate_limit_rpm,
-            allowed_models: k.allowed_models,
+        .map(|k| {
+            let allowed_models = k.get_allowed_models();
+            ApiKeyInfo {
+                id: k.id,
+                name: k.name,
+                prefix: k.prefix,
+                is_active: k.is_active,
+                last_used: k.last_used,
+                expires_at: k.expires_at,
+                created_at: k.created_at,
+                rate_limit_rpm: k.rate_limit_rpm,
+                allowed_models,
+            }
         })
         .collect();
 

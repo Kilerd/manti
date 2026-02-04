@@ -27,14 +27,12 @@ impl DatabaseService {
 
     /// Run database migrations
     pub async fn migrate(&self) -> crate::Result<()> {
-        let migrator = Migrator::from_path("./migrations")
-            .map_err(|e| crate::MantiError::Database(conservator::Error::Other(Box::new(e))))?;
+        let migrator = Migrator::from_path("./migrations")?;
 
         let mut conn = self.pool.get().await
             .map_err(|e| crate::MantiError::Database(e))?;
 
-        migrator.run(&mut conn).await
-            .map_err(|e| crate::MantiError::Database(conservator::Error::Other(Box::new(e))))?;
+        migrator.run(&mut conn).await?;
 
         tracing::info!("Migrations completed successfully");
         Ok(())

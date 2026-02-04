@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use conservator::{Domain, Creatable, Selectable};
+use conservator::{Domain, Creatable};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -27,7 +27,6 @@ pub struct ProviderConfig {
 
 /// DTO for creating provider configurations
 #[derive(Debug, Clone, Creatable)]
-#[creatable(domain = "ProviderConfig")]
 pub struct CreateProviderConfig {
     pub user_id: Uuid,
     pub provider_type: String,

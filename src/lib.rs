@@ -12,6 +12,9 @@ pub enum MantiError {
     #[error("Database error: {0}")]
     Database(#[from] conservator::Error),
 
+    #[error("Migration error: {0}")]
+    Migration(#[from] conservator::MigrateError),
+
     #[error("Configuration error: {0}")]
     Config(String),
 
@@ -44,6 +47,7 @@ impl MantiError {
         use axum::http::StatusCode;
         match self {
             MantiError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            MantiError::Migration(_) => StatusCode::INTERNAL_SERVER_ERROR,
             MantiError::Config(_) => StatusCode::INTERNAL_SERVER_ERROR,
             MantiError::Auth(_) => StatusCode::UNAUTHORIZED,
             MantiError::Provider(_) => StatusCode::BAD_GATEWAY,

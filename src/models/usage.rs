@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use conservator::{Domain, Creatable, Selectable};
+use conservator::{Domain, Creatable};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
@@ -25,7 +25,6 @@ pub struct Usage {
 
 /// DTO for creating usage records
 #[derive(Debug, Clone, Creatable)]
-#[creatable(domain = "Usage")]
 pub struct CreateUsage {
     pub user_id: Uuid,
     pub api_key_id: Option<Uuid>,

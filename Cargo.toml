@@ -5,13 +5,14 @@ edition = "2021"
 
 [dependencies]
 # Web framework
-gotcha = { git = "ssh://git@github.com/kilerd/gotcha.git", branch = "main" }
+gotcha = { git = "https://github.com/Kilerd/gotcha.git", branch = "main" }
 
 # Database ORM
-conservator = { git = "ssh://git@github.com/kilerd/conservator.git", branch = "main" }
+conservator = { git = "https://github.com/kilerd/conservator.git", branch = "main" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+tokio-postgres = "0.7"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

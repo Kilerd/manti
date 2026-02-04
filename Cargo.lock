@@ -434,7 +434,7 @@ dependencies = [
 [[package]]
 name = "conservator"
 version = "0.2.0"
-source = "git+ssh://git@github.com/kilerd/conservator.git?branch=main#76dd91f57be648c007edee5b79dd2815ec84ec50"
+source = "git+https://github.com/kilerd/conservator.git?branch=main#deb6adfa61510efdb2b599a6ed32b887a130f0ba"
 dependencies = [
  "async-trait",
  "chrono",
@@ -453,7 +453,7 @@ dependencies = [
 [[package]]
 name = "conservator_macro"
 version = "0.2.0"
-source = "git+ssh://git@github.com/kilerd/conservator.git?branch=main#76dd91f57be648c007edee5b79dd2815ec84ec50"
+source = "git+https://github.com/kilerd/conservator.git?branch=main#deb6adfa61510efdb2b599a6ed32b887a130f0ba"
 dependencies = [
  "darling 0.13.4",
  "itertools 0.10.5",
@@ -740,7 +740,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -944,7 +944,7 @@ dependencies = [
 [[package]]
 name = "gotcha"
 version = "0.2.2"
-source = "git+ssh://git@github.com/kilerd/gotcha.git?branch=main#3fbac975b0fca2dbfbb134f54e16382c0401589e"
+source = "git+https://github.com/Kilerd/gotcha.git?branch=main#3fbac975b0fca2dbfbb134f54e16382c0401589e"
 dependencies = [
  "async-trait",
  "axum",
@@ -975,7 +975,7 @@ dependencies = [
 [[package]]
 name = "gotcha_macro"
 version = "0.2.0"
-source = "git+ssh://git@github.com/kilerd/gotcha.git?branch=main#3fbac975b0fca2dbfbb134f54e16382c0401589e"
+source = "git+https://github.com/Kilerd/gotcha.git?branch=main#3fbac975b0fca2dbfbb134f54e16382c0401589e"
 dependencies = [
  "darling 0.14.4",
  "proc-macro-error",
@@ -1518,6 +1518,7 @@ dependencies = [
  "thiserror 1.0.69",
  "time",
  "tokio",
+ "tokio-postgres",
  "tokio-stream",
  "tower 0.4.13",
  "tower-http 0.5.2",
@@ -2340,7 +2341,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2740,7 +2741,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3475,7 +3476,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

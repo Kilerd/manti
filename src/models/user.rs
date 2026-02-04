@@ -21,7 +21,6 @@ pub struct User {
 
 /// DTO for creating new users
 #[derive(Debug, Clone, Creatable)]
-#[creatable(domain = "User")]
 pub struct CreateUser {
     pub email: String,
     pub username: String,
@@ -129,7 +128,6 @@ pub struct LoginResponse {
 
 /// Public user information (without sensitive data)
 #[derive(Debug, Clone, Serialize, Deserialize, Selectable)]
-#[selectable(from = "User")]
 pub struct UserInfo {
     pub id: Uuid,
     pub email: String,

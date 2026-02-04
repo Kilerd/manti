@@ -3,7 +3,7 @@ use crate::{
     db::DatabaseService,
     models::{
         provider_config::{
-            CreateProviderConfigRequest, ProviderConfig, ProviderConfigInfo,
+            CreateProviderConfig, CreateProviderConfigRequest, ProviderConfig, ProviderConfigInfo,
             UpdateProviderConfigRequest, UsageStats,
         },
     },
@@ -96,20 +96,21 @@ pub async fn create_provider(
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
     let encrypted_key = ProviderConfig::encrypt_api_key(&req.api_key, &jwt_secret);
 
-    let mut config = ProviderConfig::new(
+    let create_config = CreateProviderConfig {
         user_id,
-        req.provider_type,
-        req.name,
-        encrypted_key,
-    );
-
-    config.base_url = req.base_url;
-    config.priority = req.priority.unwrap_or(0);
-    config.rate_limit = req.rate_limit;
-    config.monthly_quota = req.monthly_quota;
+        provider_type: req.provider_type,
+        name: req.name,
+        api_key_encrypted: encrypted_key,
+        base_url: req.base_url,
+        priority: req.priority.unwrap_or(0),
+        is_active: true,
+        rate_limit: req.rate_limit,
+        monthly_quota: req.monthly_quota,
+        used_quota: 0.0,
+    };
 
     let created = db
-        .create_provider_config(&config)
+        .create_provider_config(create_config)
         .await
         .map_err(|e| e.to_status_code())?;
 
