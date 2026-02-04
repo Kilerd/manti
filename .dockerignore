@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+target/
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Development files
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Environment files
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+README.md
+DEPLOY.md
+docs/
+
+# Test files
+test_*.py
+tests/
+*.test
+
+# Backup files
+backups/
+*.sql
+
+# Scripts (not needed in container)
+scripts/
+deploy.sh
+Makefile
+
+# External reference
+external-hub/

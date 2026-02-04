@@ -1,1 +1,24 @@
 /target
+**/*.rs.bk
+*.pdb
+
+# Environment files
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# External reference projects
+external-hub/
+
+# Test files
+*.log
