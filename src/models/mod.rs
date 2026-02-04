@@ -1,6 +1,9 @@
 pub mod chat;
 pub mod streaming;
 pub mod response;
+pub mod user;
+pub mod api_key;
+pub mod usage;
 
 use conservator::{PooledConnection, Error};
 

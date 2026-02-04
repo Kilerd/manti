@@ -1,6 +1,8 @@
 pub mod config;
 pub mod models;
 pub mod providers;
+pub mod db;
+pub mod auth;
 
 use thiserror::Error;
 
