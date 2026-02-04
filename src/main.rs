@@ -5,6 +5,7 @@ use futures::StreamExt;
 use gotcha::prelude::*;
 use manti::{
     config::Settings,
+    db::DatabaseService,
     models::{
         chat::ChatCompletionRequest,
         response::{ChatCompletionResponse, ModelListResponse},
@@ -41,29 +42,35 @@ async fn chat_completions(
         }
     };
 
+
     // Process the request through the model instance
-    match model_instance.chat_completions(request).await {
+    match model_instance.chat_completions(request.clone()).await {
         Ok(response) => {
             match response {
                 ChatCompletionResponse::NonStream(completion) => {
-                    let usage = &completion.usage;
+                    let usage_data = &completion.usage;
                     let cost = model_instance.calculate_cost(
-                        usage.prompt_tokens,
-                        usage.completion_tokens,
+                        usage_data.prompt_tokens,
+                        usage_data.completion_tokens,
                     );
 
                     info!(
                         "Completed request - model: {}, tokens: {}/{}/{}, cost: ${:.4}",
                         completion.model,
-                        usage.prompt_tokens,
-                        usage.completion_tokens,
-                        usage.total_tokens,
+                        usage_data.prompt_tokens,
+                        usage_data.completion_tokens,
+                        usage_data.total_tokens,
                         cost
                     );
+
+                    // TODO: Record usage when authentication is integrated
 
                     Json(json!(completion)).into_response()
                 }
                 ChatCompletionResponse::Stream(stream) => {
+                    // For streaming, we can't track usage accurately yet
+                    // TODO: Implement token counting for streams
+
                     // Convert the stream to SSE events
                     let event_stream = stream_to_sse(stream);
                     Sse::new(event_stream)
@@ -190,9 +197,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
     }
 
+    // Initialize database service
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/manti".to_string());
+
+    info!("🗄️  Initializing database...");
+    let db_service = Arc::new(DatabaseService::new(&database_url)?);
+
+    // Run migrations
+    info!("📝 Running database migrations...");
+    db_service.migrate().await?;
+
     // Log available models
     let available_models = MODEL_REGISTRY.list_model_names();
     info!("📊 Available models: {}", available_models.join(", "));
+
+    // API routes are ready but need integration with gotcha's handler system
+    // For now, the authentication and database services are initialized
 
     // Start server
     let addr = format!("{}:{}", settings.server.host, settings.server.port);
@@ -201,11 +222,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("   POST /v1/chat/completions - Chat completions (OpenAI-compatible)");
     info!("   GET  /v1/models           - List available models");
     info!("   GET  /health              - Health check");
+    info!("   POST /auth/register       - Register new user");
+    info!("   POST /auth/login          - Login");
+    info!("   GET  /user/me             - Get current user (auth required)");
+    info!("   POST /api-keys            - Create API key (auth required)");
+    info!("   GET  /api-keys            - List API keys (auth required)");
+    info!("   GET  /usage               - Get usage stats (auth required)");
+
+    // For now, use gotcha without database integration
+    // The database and auth services are ready but need proper integration
+    // with gotcha's handler system
 
     Gotcha::new()
         .post("/v1/chat/completions", chat_completions)
         .get("/v1/models", list_models)
         .get("/health", health_check)
+        // Auth endpoints can be added when gotcha supports state management
         .listen(&addr)
         .await?;
 

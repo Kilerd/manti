@@ -3,6 +3,7 @@ pub mod models;
 pub mod providers;
 pub mod db;
 pub mod auth;
+pub mod api;
 
 use thiserror::Error;
 

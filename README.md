@@ -56,14 +56,15 @@ src/
 - ✅ **流式响应（SSE）** - 完全支持 Server-Sent Events 流式传输
 - ✅ ModelInstance 模式 - 高效的模型实例管理
 - ✅ ModelRegistry - 中心化的模型和 Provider 管理
-- ✅ 数据库模型定义
-- ✅ 基础认证中间件
+- ✅ **完整的用户认证系统** - JWT 和 API Key 双重认证支持
+- ✅ **API Key 管理** - 创建、撤销、限流、模型权限控制
+- ✅ **数据库集成（conservator ORM）** - 完整的数据库服务层
+- ✅ **使用量追踪** - 记录每次请求的 token 使用和成本
+- ✅ 数据库迁移系统
 
 ### 待实现
 
-- ⏳ 完整的用户认证系统
-- ⏳ API Key 管理
-- ⏳ 使用量追踪和计费
+- ⏳ 计费和账单生成
 - ⏳ 速率限制
 - ⏳ 请求重试和故障转移
 - ⏳ 更多 Provider 支持（Google、Azure 等）
