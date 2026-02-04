@@ -88,6 +88,10 @@ vim .env
 # 创建 PostgreSQL 数据库
 createdb manti
 
+# 设置环境变量
+export DATABASE_URL="postgres://postgres:password@localhost/manti"
+export JWT_SECRET="your-secret-key-here"
+
 # 运行迁移（会在应用启动时自动执行）
 ```
 
