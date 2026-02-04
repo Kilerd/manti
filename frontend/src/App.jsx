@@ -1,4 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { Toaster } from '@/components/ui/toaster';
 import Layout from '@/components/Layout';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
@@ -6,15 +8,65 @@ import Dashboard from '@/pages/Dashboard';
 import ApiKeys from '@/pages/ApiKeys';
 import Usage from '@/pages/Usage';
 import Profile from '@/pages/Profile';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from '@/hooks/use-toast';
 
 function PrivateRoute({ children }) {
-  const token = localStorage.getItem('token');
-  return token ? children : <Navigate to="/login" />;
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  return isAuthenticated ? children : <Navigate to="/login" />;
 }
 
-function App() {
+function AuthListener() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  useEffect(() => {
+    const handleAuthLogout = (event) => {
+      const reason = event.detail?.reason;
+
+      if (reason === 'session_expired') {
+        toast({
+          title: "Session Expired",
+          description: "Please login again to continue.",
+          variant: "destructive",
+        });
+      } else if (reason === 'refresh_failed') {
+        toast({
+          title: "Authentication Failed",
+          description: "Please login again.",
+          variant: "destructive",
+        });
+      }
+
+      // Clear auth state
+      logout();
+      navigate('/login');
+    };
+
+    window.addEventListener('auth:logout', handleAuthLogout);
+
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
+  }, [navigate, logout]);
+
+  return null;
+}
+
+function AppRoutes() {
   return (
-    <Router>
+    <>
+      <AuthListener />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -33,6 +85,17 @@ function App() {
           <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <AppRoutes />
+        <Toaster />
+      </AuthProvider>
     </Router>
   );
 }

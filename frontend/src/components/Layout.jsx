@@ -1,4 +1,4 @@
-import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
@@ -9,19 +9,14 @@ import {
   Menu,
   X
 } from 'lucide-react';
-import { authAPI } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export default function Layout() {
-  const navigate = useNavigate();
   const location = useLocation();
+  const { logout, user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const handleLogout = async () => {
-    await authAPI.logout();
-    navigate('/login');
-  };
 
   const navigation = [
     { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
@@ -82,11 +77,17 @@ export default function Layout() {
             })}
           </nav>
 
-          <div className="p-4 border-t">
+          <div className="p-4 border-t space-y-3">
+            {user && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                <div className="font-medium">{user.name || user.email}</div>
+                <div className="text-xs">{user.email}</div>
+              </div>
+            )}
             <Button
               variant="ghost"
               className="w-full justify-start"
-              onClick={handleLogout}
+              onClick={logout}
             >
               <LogOut className="h-5 w-5 mr-3" />
               Logout
