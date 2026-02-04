@@ -76,7 +76,7 @@ impl AnthropicProvider {
             .unwrap_or_else(|| "https://api.anthropic.com/v1".to_string())
     }
 
-    fn convert_to_anthropic_format(&self, mut request: ChatCompletionRequest) -> Value {
+    fn convert_to_anthropic_format(&self, request: ChatCompletionRequest) -> Value {
         // Extract system message if present
         let system_message = request.messages
             .iter()

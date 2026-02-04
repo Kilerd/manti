@@ -4,6 +4,7 @@ pub mod response;
 pub mod user;
 pub mod api_key;
 pub mod usage;
+pub mod provider_config;
 
 use conservator::{PooledConnection, Error};
 

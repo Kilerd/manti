@@ -152,6 +152,166 @@ class MantiAdminCLI:
                 print(f"   错误: {response.text}")
             return False
 
+    # Provider management methods
+
+    def list_providers(self, user_id: Optional[str] = None):
+        """列出 Provider 配置"""
+        if not self.token:
+            print("❌ 请先登录")
+            return
+
+        if user_id:
+            url = f"{self.base_url}/admin/users/{user_id}/providers"
+        else:
+            url = f"{self.base_url}/admin/providers"
+
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {self.token}"}
+        )
+
+        if response.status_code == 200:
+            providers = response.json()
+            print(f"\n🔌 Provider 配置列表 (共 {len(providers)} 个):")
+            print("-" * 80)
+
+            for p in providers:
+                status = "✅ 活跃" if p['is_active'] else "❌ 已禁用"
+                print(f"  {status} {p['name']} ({p['provider_type']})")
+                print(f"      ID: {p['id']}")
+                print(f"      用户: {p['user_id']}")
+                if p.get('base_url'):
+                    print(f"      Base URL: {p['base_url']}")
+                print(f"      优先级: {p['priority']}")
+                if p.get('rate_limit'):
+                    print(f"      速率限制: {p['rate_limit']}")
+                if p.get('monthly_quota'):
+                    print(f"      月度配额: ${p['monthly_quota']:.2f} (已用: ${p['used_quota']:.2f})")
+                print(f"      创建时间: {p['created_at']}")
+                print()
+        else:
+            print(f"❌ 获取 Provider 列表失败: {response.status_code}")
+            if response.text:
+                print(f"   错误: {response.text}")
+
+    def create_provider(
+        self,
+        provider_type: str,
+        name: str,
+        api_key: str,
+        user_id: Optional[str] = None,
+        base_url: Optional[str] = None,
+        priority: int = 0,
+        rate_limit: Optional[int] = None,
+        monthly_quota: Optional[float] = None,
+    ):
+        """创建 Provider 配置"""
+        if not self.token:
+            print("❌ 请先登录")
+            return
+
+        payload = {
+            "provider_type": provider_type,
+            "name": name,
+            "api_key": api_key,
+            "priority": priority,
+        }
+
+        if user_id:
+            payload["user_id"] = user_id
+        if base_url:
+            payload["base_url"] = base_url
+        if rate_limit:
+            payload["rate_limit"] = rate_limit
+        if monthly_quota:
+            payload["monthly_quota"] = monthly_quota
+
+        response = requests.post(
+            f"{self.base_url}/admin/providers",
+            headers={"Authorization": f"Bearer {self.token}"},
+            json=payload
+        )
+
+        if response.status_code == 200:
+            config = response.json()
+            print(f"✅ Provider 配置创建成功")
+            print(f"   ID: {config['id']}")
+            print(f"   名称: {config['name']}")
+            print(f"   类型: {config['provider_type']}")
+            print(f"   用户: {config['user_id']}")
+        else:
+            print(f"❌ 创建 Provider 配置失败: {response.status_code}")
+            if response.text:
+                print(f"   错误: {response.text}")
+
+    def delete_provider(self, provider_id: str):
+        """删除 Provider 配置"""
+        if not self.token:
+            print("❌ 请先登录")
+            return
+
+        response = requests.delete(
+            f"{self.base_url}/admin/providers/{provider_id}",
+            headers={"Authorization": f"Bearer {self.token}"}
+        )
+
+        if response.status_code == 204:
+            print(f"✅ Provider 配置已删除")
+        else:
+            print(f"❌ 删除 Provider 配置失败: {response.status_code}")
+            if response.text:
+                print(f"   错误: {response.text}")
+
+    def get_usage(self, user_id: str, start: Optional[str] = None, end: Optional[str] = None):
+        """获取使用量统计"""
+        if not self.token:
+            print("❌ 请先登录")
+            return
+
+        params = {}
+        if start:
+            params['start'] = start
+        if end:
+            params['end'] = end
+
+        response = requests.get(
+            f"{self.base_url}/admin/users/{user_id}/usage",
+            headers={"Authorization": f"Bearer {self.token}"},
+            params=params
+        )
+
+        if response.status_code == 200:
+            stats = response.json()
+            print(f"\n📊 用户使用量统计 (用户: {user_id})")
+            print("=" * 80)
+            print(f"总请求数: {stats['total_requests']}")
+            print(f"总 Token 数: {stats['total_tokens']:,}")
+            print(f"总成本: ${stats['total_cost']:.4f}")
+
+            if stats['by_model']:
+                print(f"\n按模型统计:")
+                print("-" * 80)
+                for m in stats['by_model']:
+                    print(f"  {m['model']}:")
+                    print(f"    请求数: {m['requests']}")
+                    print(f"    Prompt Tokens: {m['prompt_tokens']:,}")
+                    print(f"    Completion Tokens: {m['completion_tokens']:,}")
+                    print(f"    总 Tokens: {m['total_tokens']:,}")
+                    print(f"    成本: ${m['cost']:.4f}")
+
+            if stats['by_provider']:
+                print(f"\n按 Provider 统计:")
+                print("-" * 80)
+                for p in stats['by_provider']:
+                    print(f"  {p['provider']}:")
+                    print(f"    请求数: {p['requests']}")
+                    print(f"    总 Tokens: {p['total_tokens']:,}")
+                    print(f"    成本: ${p['cost']:.4f}")
+        else:
+            print(f"❌ 获取使用量统计失败: {response.status_code}")
+            if response.text:
+                print(f"   错误: {response.text}")
+
 def main():
     parser = argparse.ArgumentParser(description="Manti LLM Gateway 管理工具")
     parser.add_argument("--url", default=BASE_URL, help="Gateway URL")
@@ -185,6 +345,29 @@ def main():
     quick_setup_parser = subparsers.add_parser("quick-setup", help="快速设置（创建用户并生成 API Key）")
     quick_setup_parser.add_argument("email", help="用户邮箱")
     quick_setup_parser.add_argument("username", help="用户名")
+
+    # Provider 管理命令
+    list_providers_parser = subparsers.add_parser("list-providers", help="列出 Provider 配置")
+    list_providers_parser.add_argument("--user", help="用户 ID（可选，不提供则列出所有）")
+
+    create_provider_parser = subparsers.add_parser("create-provider", help="创建 Provider 配置")
+    create_provider_parser.add_argument("type", help="Provider 类型 (openai, anthropic, google)")
+    create_provider_parser.add_argument("name", help="配置名称")
+    create_provider_parser.add_argument("api_key", help="Provider API Key")
+    create_provider_parser.add_argument("--user", help="用户 ID（可选，默认为当前用户）")
+    create_provider_parser.add_argument("--base-url", help="自定义 Base URL")
+    create_provider_parser.add_argument("--priority", type=int, default=0, help="优先级（默认 0）")
+    create_provider_parser.add_argument("--rate-limit", type=int, help="速率限制")
+    create_provider_parser.add_argument("--quota", type=float, help="月度配额")
+
+    delete_provider_parser = subparsers.add_parser("delete-provider", help="删除 Provider 配置")
+    delete_provider_parser.add_argument("provider_id", help="Provider ID")
+
+    # 使用量统计命令
+    usage_stats_parser = subparsers.add_parser("usage", help="获取使用量统计")
+    usage_stats_parser.add_argument("user_id", help="用户 ID")
+    usage_stats_parser.add_argument("--start", help="开始时间 (ISO 8601 格式)")
+    usage_stats_parser.add_argument("--end", help="结束时间 (ISO 8601 格式)")
 
     args = parser.parse_args()
 
@@ -261,6 +444,43 @@ curl -X POST {args.url}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -d '{{"model": "gpt-4o-mini", "messages": [{{"role": "user", "content": "Hello!"}}]}}'
                     """)
+
+    elif args.command == "list-providers":
+        email = input("请输入邮箱进行登录: ")
+        password = getpass.getpass("请输入密码: ")
+
+        if cli.login(email, password):
+            cli.list_providers(args.user)
+
+    elif args.command == "create-provider":
+        email = input("请输入邮箱进行登录: ")
+        password = getpass.getpass("请输入密码: ")
+
+        if cli.login(email, password):
+            cli.create_provider(
+                args.type,
+                args.name,
+                args.api_key,
+                user_id=args.user,
+                base_url=args.base_url,
+                priority=args.priority,
+                rate_limit=args.rate_limit,
+                monthly_quota=args.quota,
+            )
+
+    elif args.command == "delete-provider":
+        email = input("请输入邮箱进行登录: ")
+        password = getpass.getpass("请输入密码: ")
+
+        if cli.login(email, password):
+            cli.delete_provider(args.provider_id)
+
+    elif args.command == "usage":
+        email = input("请输入邮箱进行登录: ")
+        password = getpass.getpass("请输入密码: ")
+
+        if cli.login(email, password):
+            cli.get_usage(args.user_id, start=args.start, end=args.end)
 
 if __name__ == "__main__":
     main()
