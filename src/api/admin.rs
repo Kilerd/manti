@@ -7,6 +7,7 @@ use crate::{
             UpdateProviderConfigRequest, UsageStats,
         },
     },
+    reload_providers,
 };
 use axum::{
     extract::{Extension, Path, Query, State},
@@ -114,6 +115,9 @@ pub async fn create_provider(
         .await
         .map_err(|e| e.to_status_code())?;
 
+    // Reload providers after create
+    let _ = reload_providers(&db, &jwt_secret).await;
+
     Ok(Json(created.into()))
 }
 
@@ -137,9 +141,8 @@ pub async fn update_provider(
     }
 
     // Encrypt new API key if provided
+    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
     let encrypted_key = if let Some(ref api_key) = req.api_key {
-        let jwt_secret =
-            std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
         Some(ProviderConfig::encrypt_api_key(api_key, &jwt_secret))
     } else {
         None
@@ -158,6 +161,9 @@ pub async fn update_provider(
         )
         .await
         .map_err(|e| e.to_status_code())?;
+
+    // Reload providers after update
+    let _ = reload_providers(&db, &jwt_secret).await;
 
     Ok(Json(updated.into()))
 }
@@ -183,6 +189,10 @@ pub async fn delete_provider(
     db.delete_provider_config(id, existing.user_id)
         .await
         .map_err(|e| e.to_status_code())?;
+
+    // Reload providers after delete
+    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
+    let _ = reload_providers(&db, &jwt_secret).await;
 
     Ok(StatusCode::NO_CONTENT)
 }

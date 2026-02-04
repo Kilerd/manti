@@ -7,7 +7,6 @@ pub struct Settings {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
     pub auth: AuthConfig,
-    pub providers: ProvidersConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -26,31 +25,6 @@ pub struct DatabaseConfig {
 pub struct AuthConfig {
     pub jwt_secret: String,
     pub jwt_expiration: i64, // seconds
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct ProvidersConfig {
-    pub openai: Option<OpenAIConfig>,
-    pub anthropic: Option<AnthropicConfig>,
-    pub google: Option<GoogleConfig>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct OpenAIConfig {
-    pub api_key: String,
-    pub base_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct AnthropicConfig {
-    pub api_key: String,
-    pub base_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct GoogleConfig {
-    pub api_key: String,
-    pub base_url: Option<String>,
 }
 
 impl Settings {

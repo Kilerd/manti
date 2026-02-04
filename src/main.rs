@@ -11,16 +11,12 @@ use manti::{
         response::{ChatCompletionResponse, ModelListResponse},
         streaming::ChatCompletionChunk,
     },
-    providers::{model_registry::ModelRegistry, ProviderConfig, ProviderType},
+    reload_providers, MODEL_REGISTRY,
 };
 use serde_json::json;
 use std::sync::Arc;
 use tracing::{error, info};
 use tracing_subscriber;
-
-// Global model registry
-static MODEL_REGISTRY: gotcha::Lazy<Arc<ModelRegistry>> =
-    gotcha::Lazy::new(|| Arc::new(ModelRegistry::new()));
 
 async fn chat_completions(
     Json(request): Json<ChatCompletionRequest>,
@@ -166,47 +162,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         e
     })?;
 
-    info!("📦 Initializing providers...");
-
-    // Register providers based on configuration
-    if let Some(openai_config) = &settings.providers.openai {
-        info!("  ✓ Registering OpenAI provider");
-        MODEL_REGISTRY.register_provider(
-            "openai".to_string(),
-            ProviderConfig {
-                provider_type: ProviderType::OpenAI,
-                api_key: openai_config.api_key.clone(),
-                base_url: openai_config.base_url.clone(),
-                organization: None,
-                extra_params: Default::default(),
-            },
-        )?;
-    }
-
-    if let Some(anthropic_config) = &settings.providers.anthropic {
-        info!("  ✓ Registering Anthropic provider");
-        MODEL_REGISTRY.register_provider(
-            "anthropic".to_string(),
-            ProviderConfig {
-                provider_type: ProviderType::Anthropic,
-                api_key: anthropic_config.api_key.clone(),
-                base_url: anthropic_config.base_url.clone(),
-                organization: None,
-                extra_params: Default::default(),
-            },
-        )?;
-    }
-
     // Initialize database service
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/manti".to_string());
-
     info!("🗄️  Initializing database...");
-    let db_service = Arc::new(DatabaseService::new(&database_url)?);
+    let db_service = Arc::new(DatabaseService::new(&settings.database.url)?);
 
     // Run migrations
     info!("📝 Running database migrations...");
     db_service.migrate().await?;
+
+    // Load providers from database
+    info!("📦 Loading providers from database...");
+    let loaded = reload_providers(&db_service, &settings.auth.jwt_secret).await?;
+    info!("  ✓ Loaded {} provider(s)", loaded);
 
     // Log available models
     let available_models = MODEL_REGISTRY.list_model_names();

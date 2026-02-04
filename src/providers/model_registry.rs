@@ -90,4 +90,16 @@ impl ModelRegistry {
         let models = self.models.read().unwrap();
         models.keys().cloned().collect()
     }
+
+    /// Clear all providers and models
+    pub fn clear(&self) {
+        {
+            let mut providers = self.providers.write().unwrap();
+            providers.clear();
+        }
+        {
+            let mut models = self.models.write().unwrap();
+            models.clear();
+        }
+    }
 }
