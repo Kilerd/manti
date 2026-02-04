@@ -28,6 +28,7 @@ pub struct ProviderConfig {
 /// DTO for creating provider configurations
 #[derive(Debug, Clone, Creatable)]
 pub struct CreateProviderConfig {
+    pub id: Uuid,
     pub user_id: Uuid,
     pub provider_type: String,
     pub name: String,

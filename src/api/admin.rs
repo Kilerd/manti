@@ -98,6 +98,7 @@ pub async fn create_provider(
     let encrypted_key = ProviderConfig::encrypt_api_key(&req.api_key, &jwt_secret);
 
     let create_config = CreateProviderConfig {
+        id: Uuid::new_v4(),
         user_id,
         provider_type: req.provider_type,
         name: req.name,

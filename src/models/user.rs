@@ -22,6 +22,7 @@ pub struct User {
 /// DTO for creating new users
 #[derive(Debug, Clone, Creatable)]
 pub struct CreateUser {
+    pub id: Uuid,
     pub email: String,
     pub username: String,
     pub password_hash: String,
@@ -35,6 +36,7 @@ impl CreateUser {
         let password_hash = hash_password(password)?;
 
         Ok(Self {
+            id: Uuid::new_v4(),
             email,
             username,
             password_hash,

@@ -26,6 +26,7 @@ pub struct ApiKey {
 /// DTO for creating new API keys
 #[derive(Debug, Clone, Creatable)]
 pub struct CreateApiKey {
+    pub id: Uuid,
     pub user_id: Uuid,
     pub name: String,
     pub key_hash: String,
@@ -46,6 +47,7 @@ impl CreateApiKey {
         let allowed_models_json = allowed_models.map(|models| serde_json::to_value(models).unwrap());
 
         let create_key = Self {
+            id: Uuid::new_v4(),
             user_id,
             name,
             key_hash,

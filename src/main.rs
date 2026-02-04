@@ -1,9 +1,13 @@
 use async_stream::stream;
-use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::{
+    response::{IntoResponse, Response, sse::{Event, KeepAlive, Sse}},
+    routing::{get, post},
+    Json, Router,
+};
 use futures::stream::Stream;
 use futures::StreamExt;
-use gotcha::prelude::*;
 use manti::{
+    api::routes::create_router,
     config::Settings,
     db::DatabaseService,
     models::{
@@ -15,6 +19,7 @@ use manti::{
 };
 use serde_json::json;
 use std::sync::Arc;
+use tokio::net::TcpListener;
 use tracing::{error, info};
 use tracing_subscriber;
 
@@ -136,14 +141,6 @@ async fn list_models() -> Response {
     Json(response).into_response()
 }
 
-async fn health_check() -> Response {
-    Json(json!({
-        "status": "healthy",
-        "service": "manti-llm-gateway",
-        "models_loaded": MODEL_REGISTRY.list_model_names().len(),
-    })).into_response()
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
@@ -196,17 +193,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("   GET  /api-keys            - List API keys (auth required)");
     info!("   GET  /usage               - Get usage stats (auth required)");
 
-    // For now, use gotcha without database integration
-    // The database and auth services are ready but need proper integration
-    // with gotcha's handler system
+    // Create API routes with database state
+    let api_router = create_router(db_service);
 
-    Gotcha::new()
-        .post("/v1/chat/completions", chat_completions)
-        .get("/v1/models", list_models)
-        .get("/health", health_check)
-        // Auth endpoints can be added when gotcha supports state management
-        .listen(&addr)
-        .await?;
+    // Create LLM routes (no state needed, uses global MODEL_REGISTRY)
+    let llm_router = Router::new()
+        .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/models", get(list_models));
+
+    // Merge all routes
+    let app = api_router.merge(llm_router);
+
+    // Start server
+    let listener = TcpListener::bind(&addr).await?;
+    info!("Server listening on http://{}", addr);
+    axum::serve(listener, app).await?;
 
     Ok(())
 }
