@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use conservator::{Domain, Creatable};
+use gotcha::Schematic;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -37,7 +38,7 @@ pub struct CreateModel {
 }
 
 /// Request to create a model
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Schematic)]
 pub struct CreateModelRequest {
     pub model_id: String,
     pub display_name: Option<String>,
@@ -49,7 +50,7 @@ pub struct CreateModelRequest {
 }
 
 /// Request to update a model
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Schematic)]
 pub struct UpdateModelRequest {
     pub display_name: Option<String>,
     pub input_cost_per_1k: Option<f64>,
@@ -61,7 +62,7 @@ pub struct UpdateModelRequest {
 }
 
 /// Model info for API response
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Schematic)]
 pub struct ModelInfo {
     pub id: Uuid,
     pub provider_config_id: Uuid,

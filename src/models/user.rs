@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use conservator::{Domain, Creatable, Selectable};
+use gotcha::Schematic;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -120,7 +121,7 @@ pub fn verify_password(password: &str, hash: &str) -> crate::Result<bool> {
 }
 
 /// User creation request
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Schematic)]
 pub struct CreateUserRequest {
     pub email: String,
     pub username: String,
@@ -128,21 +129,21 @@ pub struct CreateUserRequest {
 }
 
 /// User login request
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Schematic)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
 }
 
 /// User login response
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Schematic)]
 pub struct LoginResponse {
     pub token: String,
     pub user: UserInfo,
 }
 
 /// Public user information (without sensitive data)
-#[derive(Debug, Clone, Serialize, Deserialize, Selectable)]
+#[derive(Debug, Clone, Serialize, Deserialize, Selectable, Schematic)]
 pub struct UserInfo {
     pub id: Uuid,
     pub email: String,
@@ -166,7 +167,7 @@ impl From<User> for UserInfo {
 }
 
 /// Request to update user groups
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Schematic)]
 pub struct UpdateUserGroupsRequest {
     pub user_groups: Vec<String>,
 }

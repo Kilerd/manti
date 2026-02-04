@@ -1,34 +1,28 @@
 use config::{Config, ConfigError, Environment, File};
-use serde::Deserialize;
+use gotcha::ConfigWrapper;
+use serde::{Deserialize, Serialize};
 use std::env;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Settings {
-    pub server: ServerConfig,
     pub database: DatabaseConfig,
     pub auth: AuthConfig,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct ServerConfig {
-    pub host: String,
-    pub port: u16,
-}
-
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct DatabaseConfig {
     pub url: String,
     pub max_connections: u32,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct AuthConfig {
     pub jwt_secret: String,
     pub jwt_expiration: i64, // seconds
 }
 
 impl Settings {
-    pub fn new() -> Result<Self, ConfigError> {
+    pub fn new() -> Result<ConfigWrapper<Self>, ConfigError> {
         let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
 
         let s = Config::builder()

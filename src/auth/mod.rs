@@ -1,34 +1,60 @@
-use crate::db::DatabaseService;
-use crate::models::{api_key::ApiKey, user::User};
-use axum::{
+use crate::models::{api_key::hash_api_key, user::User};
+use crate::Db;
+use gotcha::axum::{
     extract::{Request, State},
     http::{header::AUTHORIZATION, StatusCode},
     middleware::Next,
     response::Response,
 };
+use gotcha::tracing::debug;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use uuid::Uuid;
 
 /// JWT claims
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: Uuid,  // User ID
+    pub sub: Uuid, // User ID
     pub email: String,
     pub username: String,
     pub is_admin: bool,
-    pub exp: i64,  // Expiration time
-    pub iat: i64,  // Issued at
+    pub exp: i64, // Expiration time
+    pub iat: i64, // Issued at
 }
 
-/// Authentication context
 #[derive(Debug, Clone)]
-pub struct AuthContext {
-    pub user_id: Uuid,
-    pub api_key_id: Option<Uuid>,
-    pub is_admin: bool,
-    pub rate_limit_rpm: Option<i32>,
+pub enum AuthContext {
+    User(Claims),
+    ApiKey { user_id: Uuid, api_key_id: Uuid },
+    None,
+}
+
+impl AuthContext {
+    pub fn user_id(&self) -> Option<Uuid> {
+        match self {
+            AuthContext::User(claims) => Some(claims.sub),
+            AuthContext::ApiKey { user_id, .. } => Some(*user_id),
+            AuthContext::None => None,
+        }
+    }
+
+    pub fn require_user(&self) -> Result<&Claims, StatusCode> {
+        match self {
+            AuthContext::User(claims) => Ok(claims),
+            _ => Err(StatusCode::UNAUTHORIZED),
+        }
+    }
+
+    pub fn require_auth(&self) -> Result<Uuid, StatusCode> {
+        self.user_id().ok_or(StatusCode::UNAUTHORIZED)
+    }
+
+    pub fn require_admin(&self) -> Result<&Claims, StatusCode> {
+        match self {
+            AuthContext::User(claims) if claims.is_admin => Ok(claims),
+            _ => Err(StatusCode::FORBIDDEN),
+        }
+    }
 }
 
 /// JWT configuration
@@ -85,142 +111,49 @@ impl JwtConfig {
 
 /// Authentication middleware
 pub async fn auth_middleware(
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // Extract authorization header
     let auth_header = request
         .headers()
         .get(AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
 
-    if let Some(auth_header) = auth_header {
-        // Check if it's a Bearer token (JWT) or API key
-        if let Some(token) = auth_header.strip_prefix("Bearer ") {
-            // Try API key first
-            if token.starts_with("sk-manti-") {
-                // Extract prefix for faster lookup
-                let prefix = token.chars().take(8).collect::<String>();
+    let Some(auth_header) = auth_header else {
+        request.extensions_mut().insert(AuthContext::None);
+        return Ok(next.run(request).await);
+    };
 
-                // Find API key by prefix first (faster)
-                if let Ok(Some(api_key)) = db.find_api_key_by_prefix(&prefix).await {
-                    // Verify the full key
-                    if api_key.verify(token) && api_key.is_valid() {
-                        // Update last used timestamp
-                        let _ = db.update_api_key_last_used(api_key.id).await;
+    let Some(token) = auth_header.strip_prefix("Bearer ") else {
+        request.extensions_mut().insert(AuthContext::None);
+        return Ok(next.run(request).await);
+    };
 
-                        // Create auth context
-                        let auth_context = AuthContext {
-                            user_id: api_key.user_id,
-                            api_key_id: Some(api_key.id),
-                            is_admin: false,  // API keys don't have admin access
-                            rate_limit_rpm: api_key.rate_limit_rpm,
-                        };
+    debug!("token is {token}");
 
-                        // Insert auth context into request extensions
-                        request.extensions_mut().insert(auth_context);
-                        request.extensions_mut().insert(api_key);
-
-                        return Ok(next.run(request).await);
-                    }
-                }
-            } else {
-                // Try JWT token
-                let jwt_config = JwtConfig::from_env();
-
-                if let Ok(claims) = jwt_config.verify_token(token) {
-                    // Create auth context
-                    let auth_context = AuthContext {
-                        user_id: claims.sub,
-                        api_key_id: None,
-                        is_admin: claims.is_admin,
-                        rate_limit_rpm: None,  // JWT users use default rate limits
-                    };
-
-                    // Insert auth context into request extensions
-                    request.extensions_mut().insert(auth_context);
-
-                    return Ok(next.run(request).await);
+    let context = if token.starts_with("sk-manti-") {
+        // Hash the token and lookup by hash
+        let key_hash = hash_api_key(token);
+        match db.find_api_key_by_hash(&key_hash).await {
+            Ok(Some(api_key)) if api_key.is_valid() => {
+                let _ = db.update_api_key_last_used(api_key.id).await;
+                AuthContext::ApiKey {
+                    user_id: api_key.user_id,
+                    api_key_id: api_key.id,
                 }
             }
+            _ => AuthContext::None,
         }
-    }
-
-    // No valid authentication found
-    Err(StatusCode::UNAUTHORIZED)
-}
-
-/// Optional authentication middleware (allows unauthenticated requests)
-pub async fn optional_auth_middleware(
-    State(db): State<Arc<DatabaseService>>,
-    mut request: Request,
-    next: Next,
-) -> Response {
-    // Extract authorization header
-    let auth_header = request
-        .headers()
-        .get(AUTHORIZATION)
-        .and_then(|h| h.to_str().ok());
-
-    if let Some(auth_header) = auth_header {
-        // Check if it's a Bearer token (JWT) or API key
-        if let Some(token) = auth_header.strip_prefix("Bearer ") {
-            // Try API key first
-            if token.starts_with("sk-manti-") {
-                // Extract prefix for faster lookup
-                let prefix = token.chars().take(8).collect::<String>();
-
-                // Find API key by prefix first (faster)
-                if let Ok(Some(api_key)) = db.find_api_key_by_prefix(&prefix).await {
-                    // Verify the full key
-                    if api_key.verify(token) && api_key.is_valid() {
-                        // Update last used timestamp
-                        let _ = db.update_api_key_last_used(api_key.id).await;
-
-                        // Create auth context
-                        let auth_context = AuthContext {
-                            user_id: api_key.user_id,
-                            api_key_id: Some(api_key.id),
-                            is_admin: false,
-                            rate_limit_rpm: api_key.rate_limit_rpm,
-                        };
-
-                        // Insert auth context into request extensions
-                        request.extensions_mut().insert(auth_context);
-                        request.extensions_mut().insert(api_key);
-                    }
-                }
-            } else {
-                // Try JWT token
-                let jwt_config = JwtConfig::from_env();
-
-                if let Ok(claims) = jwt_config.verify_token(token) {
-                    // Create auth context
-                    let auth_context = AuthContext {
-                        user_id: claims.sub,
-                        api_key_id: None,
-                        is_admin: claims.is_admin,
-                        rate_limit_rpm: None,
-                    };
-
-                    // Insert auth context into request extensions
-                    request.extensions_mut().insert(auth_context);
-                }
-            }
+    } else {
+        let jwt_config = JwtConfig::from_env();
+        if let Ok(claims) = jwt_config.verify_token(token) {
+            AuthContext::User(claims)
+        } else {
+            AuthContext::None
         }
-    }
+    };
 
-    // Continue even without authentication
-    next.run(request).await
-}
-
-/// Extract auth context from request (for use in handlers)
-pub fn get_auth_context(request: &Request) -> Option<AuthContext> {
-    request.extensions().get::<AuthContext>().cloned()
-}
-
-/// Extract API key from request (for use in handlers when checking model permissions)
-pub fn get_api_key(request: &Request) -> Option<ApiKey> {
-    request.extensions().get::<ApiKey>().cloned()
+    request.extensions_mut().insert(context);
+    Ok(next.run(request).await)
 }

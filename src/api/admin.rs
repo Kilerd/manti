@@ -1,6 +1,5 @@
 use crate::{
     auth::AuthContext,
-    db::DatabaseService,
     models::{
         model::{CreateModel, CreateModelRequest, ModelInfo, UpdateModelRequest},
         provider_config::{
@@ -9,41 +8,31 @@ use crate::{
         },
         user::{UpdateUserGroupsRequest, UserInfo},
     },
-    reload_providers,
-};
-use axum::{
-    extract::{Extension, Path, Query, State},
-    http::StatusCode,
-    Json,
+    reload_providers, Db,
 };
 use chrono::{DateTime, Duration, Utc};
+use gotcha::axum::{
+    extract::{Extension, Path, Query, State},
+    http::StatusCode,
+};
+use gotcha::{Json, Schematic};
 use serde::Deserialize;
-use std::sync::Arc;
 use uuid::Uuid;
 
-// Admin middleware - check if user is admin
-pub async fn require_admin(auth: &AuthContext, db: &DatabaseService) -> Result<(), StatusCode> {
-    let user = db
-        .find_user_by_id(auth.user_id)
-        .await
-        .map_err(|e| e.to_status_code())?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-
-    if !user.is_admin {
-        return Err(StatusCode::FORBIDDEN);
-    }
-
+fn require_admin(auth: &AuthContext) -> Result<(), StatusCode> {
+    auth.require_admin()?;
     Ok(())
 }
 
 // Provider configuration handlers (admin only, global providers)
 
 /// List all provider configurations (admin only)
+#[gotcha::api(group = "Admin - Providers")]
 pub async fn list_all_providers(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
 ) -> Result<Json<Vec<ProviderConfigInfo>>, StatusCode> {
-    require_admin(&auth, &db).await?;
+    require_admin(&auth)?;
 
     let configs = db
         .list_all_provider_configs()
@@ -54,12 +43,13 @@ pub async fn list_all_providers(
 }
 
 /// Create a new provider configuration (admin only)
+#[gotcha::api(group = "Admin - Providers")]
 pub async fn create_provider(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
     Json(req): Json<CreateProviderConfigRequest>,
 ) -> Result<Json<ProviderConfigInfo>, StatusCode> {
-    require_admin(&auth, &db).await?;
+    require_admin(&auth)?;
 
     // Validate provider type
     if !ProviderConfig::is_valid_provider_type(&req.provider_type) {
@@ -95,13 +85,14 @@ pub async fn create_provider(
 }
 
 /// Update a provider configuration (admin only)
+#[gotcha::api(group = "Admin - Providers")]
 pub async fn update_provider(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateProviderConfigRequest>,
 ) -> Result<Json<ProviderConfigInfo>, StatusCode> {
-    require_admin(&auth, &db).await?;
+    require_admin(&auth)?;
 
     // Verify the provider exists
     db.get_provider_config(id)
@@ -138,12 +129,13 @@ pub async fn update_provider(
 }
 
 /// Delete a provider configuration (admin only)
+#[gotcha::api(group = "Admin - Providers")]
 pub async fn delete_provider(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
     Path(id): Path<Uuid>,
-) -> Result<StatusCode, StatusCode> {
-    require_admin(&auth, &db).await?;
+) -> Result<Json<()>, StatusCode> {
+    require_admin(&auth)?;
 
     // Verify the provider exists
     db.get_provider_config(id)
@@ -159,18 +151,19 @@ pub async fn delete_provider(
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
     let _ = reload_providers(&db, &jwt_secret).await;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(()))
 }
 
 // Model handlers (admin only)
 
 /// List models for a provider (admin only)
+#[gotcha::api(group = "Admin - Models")]
 pub async fn list_provider_models(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
     Path(provider_id): Path<Uuid>,
 ) -> Result<Json<Vec<ModelInfo>>, StatusCode> {
-    require_admin(&auth, &db).await?;
+    require_admin(&auth)?;
 
     // Verify the provider exists
     db.get_provider_config(provider_id)
@@ -187,13 +180,14 @@ pub async fn list_provider_models(
 }
 
 /// Create a model for a provider (admin only)
+#[gotcha::api(group = "Admin - Models")]
 pub async fn create_model(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
     Path(provider_id): Path<Uuid>,
     Json(req): Json<CreateModelRequest>,
 ) -> Result<Json<ModelInfo>, StatusCode> {
-    require_admin(&auth, &db).await?;
+    require_admin(&auth)?;
 
     // Verify the provider exists
     db.get_provider_config(provider_id)
@@ -226,13 +220,14 @@ pub async fn create_model(
 }
 
 /// Update a model (admin only)
+#[gotcha::api(group = "Admin - Models")]
 pub async fn update_model(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
     Path(model_id): Path<Uuid>,
     Json(req): Json<UpdateModelRequest>,
 ) -> Result<Json<ModelInfo>, StatusCode> {
-    require_admin(&auth, &db).await?;
+    require_admin(&auth)?;
 
     // Verify the model exists
     db.get_model(model_id)
@@ -262,12 +257,13 @@ pub async fn update_model(
 }
 
 /// Delete a model (admin only)
+#[gotcha::api(group = "Admin - Models")]
 pub async fn delete_model(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
     Path(model_id): Path<Uuid>,
-) -> Result<StatusCode, StatusCode> {
-    require_admin(&auth, &db).await?;
+) -> Result<Json<()>, StatusCode> {
+    require_admin(&auth)?;
 
     // Verify the model exists
     db.get_model(model_id)
@@ -283,34 +279,33 @@ pub async fn delete_model(
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
     let _ = reload_providers(&db, &jwt_secret).await;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(()))
 }
 
 // User management handlers
 
 /// Get all users (admin only)
+#[gotcha::api(group = "Admin - Users")]
 pub async fn list_users(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
 ) -> Result<Json<Vec<UserInfo>>, StatusCode> {
-    require_admin(&auth, &db).await?;
+    require_admin(&auth)?;
 
-    let users = db
-        .list_all_users()
-        .await
-        .map_err(|e| e.to_status_code())?;
+    let users = db.list_all_users().await.map_err(|e| e.to_status_code())?;
 
     Ok(Json(users.into_iter().map(|u| u.into()).collect()))
 }
 
 /// Update user groups (admin only)
+#[gotcha::api(group = "Admin - Users")]
 pub async fn update_user_groups(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
+    State(db): State<Db>,
     Path(user_id): Path<Uuid>,
     Json(req): Json<UpdateUserGroupsRequest>,
 ) -> Result<Json<UserInfo>, StatusCode> {
-    require_admin(&auth, &db).await?;
+    require_admin(&auth)?;
 
     // Verify the user exists
     db.find_user_by_id(user_id)
@@ -328,22 +323,23 @@ pub async fn update_user_groups(
 
 // Usage statistics handlers
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, gotcha::Schematic)]
 pub struct UsageQuery {
     pub start: Option<String>, // ISO 8601 datetime
     pub end: Option<String>,   // ISO 8601 datetime
 }
 
 /// Get usage statistics for a user
+#[gotcha::api(group = "Admin - Usage")]
 pub async fn get_usage_stats(
     Extension(auth): Extension<AuthContext>,
-    State(db): State<Arc<DatabaseService>>,
-    Path(user_id): Path<Uuid>,
+    State(db): State<Db>,
+    Path((user_id,)): Path<(Uuid,)>,
     Query(query): Query<UsageQuery>,
 ) -> Result<Json<UsageStats>, StatusCode> {
     // Only admin or the user themselves can view their usage
-    if auth.user_id != user_id {
-        require_admin(&auth, &db).await?;
+    if auth.user_id() != Some(user_id) {
+        require_admin(&auth)?;
     }
 
     // Parse dates or use defaults (last 30 days)

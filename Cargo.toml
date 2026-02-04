@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # Web framework
-gotcha = { git = "https://github.com/Kilerd/gotcha.git", branch = "main" }
+gotcha = { git = "https://github.com/Kilerd/gotcha.git", branch = "main", features=["cors", "openapi"] }
 
 # Database ORM
 conservator = { git = "https://github.com/kilerd/conservator.git", branch = "main" }
@@ -60,7 +60,7 @@ chrono = { version = "0.4", features = ["serde"] }
 async-stream = "0.3"
 bytes = "1"
 tokio-stream = "0.1"
-axum = { version = "0.7", features = ["macros"] }
+
 
 # Tower middleware
 tower = "0.4"
@@ -68,7 +68,3 @@ tower-http = { version = "0.5", features = ["trace", "cors"] }
 
 # Environment variables
 dotenvy = "0.15"
-
-# API documentation
-utoipa = { version = "4", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "6", features = ["axum"] }

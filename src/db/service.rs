@@ -128,11 +128,11 @@ impl DatabaseService {
         }
     }
 
-    /// Find an API key by prefix (for identifying which key was used)
-    pub async fn find_api_key_by_prefix(&self, prefix: &str) -> crate::Result<Option<ApiKey>> {
+    /// Find an API key by hash
+    pub async fn find_api_key_by_hash(&self, key_hash: &str) -> crate::Result<Option<ApiKey>> {
         ApiKey::select()
             .filter(
-                ApiKey::COLUMNS.prefix.eq(prefix.to_string())
+                ApiKey::COLUMNS.key_hash.eq(key_hash.to_string())
                     & ApiKey::COLUMNS.is_active.eq(true)
             )
             .optional(&*self.pool)

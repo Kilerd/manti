@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use conservator::{Domain, Creatable};
+use gotcha::Schematic;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
@@ -40,8 +41,9 @@ impl CreateApiKey {
     /// Generate a new API key DTO
     pub fn generate(user_id: Uuid, name: String, expires_at: Option<DateTime<Utc>>, rate_limit_rpm: Option<i32>, allowed_models: Option<Vec<String>>) -> crate::Result<(Self, String)> {
         let raw_key = generate_api_key();
-        let key_hash = hash_api_key(&raw_key)?;
-        let prefix = raw_key.chars().take(8).collect::<String>();
+        let key_hash = hash_api_key(&raw_key);
+        // prefix 用于显示，取随机部分的前 8 位
+        let prefix = raw_key.strip_prefix("sk-manti-").unwrap_or(&raw_key).chars().take(8).collect::<String>();
 
         let allowed_models_json = allowed_models.map(|models| serde_json::to_value(models).unwrap());
 
@@ -64,8 +66,9 @@ impl ApiKey {
     /// Generate a new API key (backward compatibility)
     pub fn generate(user_id: Uuid, name: String) -> crate::Result<(Self, String)> {
         let raw_key = generate_api_key();
-        let key_hash = hash_api_key(&raw_key)?;
-        let prefix = raw_key.chars().take(8).collect::<String>();
+        let key_hash = hash_api_key(&raw_key);
+        // prefix 用于显示，取随机部分的前 8 位
+        let prefix = raw_key.strip_prefix("sk-manti-").unwrap_or(&raw_key).chars().take(8).collect::<String>();
 
         let api_key = Self {
             id: Uuid::new_v4(),
@@ -87,7 +90,7 @@ impl ApiKey {
 
     /// Verify an API key
     pub fn verify(&self, key: &str) -> bool {
-        verify_api_key(key, &self.key_hash).unwrap_or(false)
+        verify_api_key(key, &self.key_hash)
     }
 
     /// Check if the key is expired
@@ -153,24 +156,24 @@ fn generate_api_key() -> String {
 }
 
 /// Hash an API key
-fn hash_api_key(key: &str) -> crate::Result<String> {
+pub fn hash_api_key(key: &str) -> String {
     use sha2::{Sha256, Digest};
 
     let mut hasher = Sha256::new();
     hasher.update(key.as_bytes());
     let result = hasher.finalize();
 
-    Ok(format!("{:x}", result))
+    format!("{:x}", result)
 }
 
 /// Verify an API key against a hash
-fn verify_api_key(key: &str, hash: &str) -> crate::Result<bool> {
-    let computed_hash = hash_api_key(key)?;
-    Ok(computed_hash == hash)
+fn verify_api_key(key: &str, hash: &str) -> bool {
+    let computed_hash = hash_api_key(key);
+    computed_hash == hash
 }
 
 /// API key creation request
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Schematic)]
 pub struct CreateApiKeyRequest {
     pub name: String,
     pub expires_in_days: Option<i64>,
@@ -179,7 +182,7 @@ pub struct CreateApiKeyRequest {
 }
 
 /// API key response (for creation only, includes the raw key once)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Schematic)]
 pub struct ApiKeyResponse {
     pub id: Uuid,
     pub name: String,
@@ -190,7 +193,7 @@ pub struct ApiKeyResponse {
 }
 
 /// API key info (without sensitive data)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Schematic)]
 pub struct ApiKeyInfo {
     pub id: Uuid,
     pub name: String,

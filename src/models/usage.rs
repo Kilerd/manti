@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use conservator::{Domain, Creatable};
+use gotcha::Schematic;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 /// Usage record for tracking API usage and billing
-#[derive(Debug, Clone, Serialize, Deserialize, Domain)]
+#[derive(Debug, Clone, Serialize, Deserialize, Domain, Schematic)]
 #[domain(table = "usage")]
 pub struct Usage {
     #[domain(primary_key)]

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use conservator::{Domain, Creatable};
+use gotcha::Schematic;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -41,7 +42,7 @@ pub struct CreateProviderConfig {
     pub allowed_groups: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Schematic)]
 pub struct CreateProviderConfigRequest {
     pub provider_type: String,  // "openai", "anthropic", "google", etc.
     pub name: String,
@@ -53,7 +54,7 @@ pub struct CreateProviderConfigRequest {
     pub allowed_groups: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Schematic)]
 pub struct UpdateProviderConfigRequest {
     pub name: Option<String>,
     pub api_key: Option<String>, // If provided, will re-encrypt
@@ -65,7 +66,7 @@ pub struct UpdateProviderConfigRequest {
     pub allowed_groups: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Schematic)]
 pub struct ProviderConfigInfo {
     pub id: Uuid,
     pub provider_type: String,
@@ -195,7 +196,7 @@ impl ProviderConfig {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, gotcha::Schematic)]
 pub struct UsageStats {
     pub user_id: Uuid,
     pub total_requests: i64,
@@ -205,7 +206,7 @@ pub struct UsageStats {
     pub by_provider: Vec<ProviderUsageStats>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, gotcha::Schematic)]
 pub struct ModelUsageStats {
     pub model: String,
     pub requests: i64,
@@ -215,7 +216,7 @@ pub struct ModelUsageStats {
     pub cost: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, gotcha::Schematic)]
 pub struct ProviderUsageStats {
     pub provider: String,
     pub requests: i64,
