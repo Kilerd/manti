@@ -201,6 +201,65 @@ touch migrations/002_your_migration.sql
 # 迁移会在应用启动时自动执行
 ```
 
+## CI/CD 和 Docker 部署
+
+### GitHub Actions CI
+
+项目配置了自动化 CI/CD 流程，当代码推送到 `main` 分支时会自动：
+
+1. 构建 Docker 镜像
+2. 推送到 GitHub Container Registry (ghcr.io)
+3. 支持多架构 (amd64, arm64)
+
+### 使用 Docker 镜像
+
+```bash
+# 拉取最新镜像
+docker pull ghcr.io/[your-github-username]/managua:latest
+
+# 使用生产配置运行
+cp .env.prod.example .env
+vim .env  # 配置必要的环境变量
+./scripts/deploy-prod.sh deploy basic
+```
+
+### 部署选项
+
+```bash
+# 基础部署（仅 PostgreSQL + Manti）
+./scripts/deploy-prod.sh deploy basic
+
+# 带 SSL 支持
+./scripts/deploy-prod.sh deploy ssl
+
+# 带 Redis 缓存
+./scripts/deploy-prod.sh deploy cache
+
+# 带监控（Prometheus + Grafana）
+./scripts/deploy-prod.sh deploy monitoring
+
+# 完整部署（所有功能）
+./scripts/deploy-prod.sh deploy full
+```
+
+### 管理命令
+
+```bash
+# 查看服务状态
+./scripts/deploy-prod.sh health
+
+# 查看日志
+./scripts/deploy-prod.sh logs manti
+
+# 备份数据库
+./scripts/deploy-prod.sh backup
+
+# 停止服务
+./scripts/deploy-prod.sh stop
+```
+
+详细的 Docker Registry 使用说明请参考 [docs/DOCKER_REGISTRY.md](docs/DOCKER_REGISTRY.md)
+
 ## License
 
 MIT
