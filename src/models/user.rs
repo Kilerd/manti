@@ -1,10 +1,13 @@
 use chrono::{DateTime, Utc};
+use conservator::{Domain, Creatable, Selectable};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// User model for authentication and authorization
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Domain)]
+#[domain(table = "users")]
 pub struct User {
+    #[domain(primary_key)]
     pub id: Uuid,
     pub email: String,
     pub username: String,
@@ -16,8 +19,34 @@ pub struct User {
     pub last_login: Option<DateTime<Utc>>,
 }
 
+/// DTO for creating new users
+#[derive(Debug, Clone, Creatable)]
+#[creatable(domain = "User")]
+pub struct CreateUser {
+    pub email: String,
+    pub username: String,
+    pub password_hash: String,
+    pub is_active: bool,
+    pub is_admin: bool,
+}
+
+impl CreateUser {
+    /// Create a new user DTO with hashed password
+    pub fn new(email: String, username: String, password: &str, is_admin: bool) -> crate::Result<Self> {
+        let password_hash = hash_password(password)?;
+
+        Ok(Self {
+            email,
+            username,
+            password_hash,
+            is_active: true,
+            is_admin,
+        })
+    }
+}
+
 impl User {
-    /// Create a new user with hashed password
+    /// Create a new user with hashed password (backward compatibility)
     pub fn new(email: String, username: String, password: &str) -> crate::Result<Self> {
         let password_hash = hash_password(password)?;
 
@@ -99,7 +128,8 @@ pub struct LoginResponse {
 }
 
 /// Public user information (without sensitive data)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Selectable)]
+#[selectable(from = "User")]
 pub struct UserInfo {
     pub id: Uuid,
     pub email: String,

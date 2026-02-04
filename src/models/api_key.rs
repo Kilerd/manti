@@ -1,10 +1,14 @@
 use chrono::{DateTime, Utc};
+use conservator::{Domain, Creatable, Selectable};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 /// API Key for authenticating API requests
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Domain)]
+#[domain(table = "api_keys")]
 pub struct ApiKey {
+    #[domain(primary_key)]
     pub id: Uuid,
     pub user_id: Uuid,
     pub name: String,
@@ -16,11 +20,49 @@ pub struct ApiKey {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub rate_limit_rpm: Option<i32>,  // Requests per minute
-    pub allowed_models: Option<Vec<String>>,  // Optional model restrictions
+    pub allowed_models: Option<JsonValue>,  // Store as JSONB in database
+}
+
+/// DTO for creating new API keys
+#[derive(Debug, Clone, Creatable)]
+#[creatable(domain = "ApiKey")]
+pub struct CreateApiKey {
+    pub user_id: Uuid,
+    pub name: String,
+    pub key_hash: String,
+    pub prefix: String,
+    pub is_active: bool,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub rate_limit_rpm: Option<i32>,
+    pub allowed_models: Option<JsonValue>,
+}
+
+impl CreateApiKey {
+    /// Generate a new API key DTO
+    pub fn generate(user_id: Uuid, name: String, expires_at: Option<DateTime<Utc>>, rate_limit_rpm: Option<i32>, allowed_models: Option<Vec<String>>) -> crate::Result<(Self, String)> {
+        let raw_key = generate_api_key();
+        let key_hash = hash_api_key(&raw_key)?;
+        let prefix = raw_key.chars().take(8).collect::<String>();
+
+        let allowed_models_json = allowed_models.map(|models| serde_json::to_value(models).unwrap());
+
+        let create_key = Self {
+            user_id,
+            name,
+            key_hash,
+            prefix,
+            is_active: true,
+            expires_at,
+            rate_limit_rpm: rate_limit_rpm.or(Some(60)),  // Default 60 requests per minute
+            allowed_models: allowed_models_json,
+        };
+
+        Ok((create_key, raw_key))
+    }
 }
 
 impl ApiKey {
-    /// Generate a new API key
+    /// Generate a new API key (backward compatibility)
     pub fn generate(user_id: Uuid, name: String) -> crate::Result<(Self, String)> {
         let raw_key = generate_api_key();
         let key_hash = hash_api_key(&raw_key)?;
@@ -72,9 +114,22 @@ impl ApiKey {
     /// Check if a model is allowed for this key
     pub fn is_model_allowed(&self, model: &str) -> bool {
         match &self.allowed_models {
-            Some(models) => models.contains(&model.to_string()),
+            Some(json_models) => {
+                if let Ok(models) = serde_json::from_value::<Vec<String>>(json_models.clone()) {
+                    models.contains(&model.to_string())
+                } else {
+                    true  // If we can't parse, allow by default
+                }
+            }
             None => true,  // No restrictions means all models are allowed
         }
+    }
+
+    /// Get allowed models as Vec<String>
+    pub fn get_allowed_models(&self) -> Option<Vec<String>> {
+        self.allowed_models.as_ref().and_then(|json| {
+            serde_json::from_value::<Vec<String>>(json.clone()).ok()
+        })
     }
 }
 
