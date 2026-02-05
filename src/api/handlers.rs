@@ -2,6 +2,7 @@ use crate::{
     auth::{AuthContext, JwtConfig},
     models::{
         api_key::{ApiKeyInfo, ApiKeyResponse, CreateApiKey, CreateApiKeyRequest},
+        model::ModelInfo,
         usage::Usage,
         user::{CreateUser, CreateUserRequest, LoginRequest, LoginResponse, UserInfo},
     },
@@ -192,6 +193,27 @@ pub async fn update_profile(
     // TODO: Implement actual profile update when needed
 
     Ok(Json(user.into()))
+}
+
+/// List models available to the current user based on their user_groups
+#[gotcha::api(group = "Models")]
+pub async fn list_available_models(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Db>,
+) -> Result<Json<Vec<ModelInfo>>, StatusCode> {
+    let user_id = auth.require_auth()?;
+    let user = db
+        .find_user_by_id(user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let models = db
+        .list_models_for_groups(&user.user_groups)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(models.into_iter().map(|m| m.into()).collect()))
 }
 
 // API Key handlers

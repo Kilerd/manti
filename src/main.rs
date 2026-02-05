@@ -417,6 +417,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .put("/user/profile", handlers::update_profile)
         .get("/auth/validate", handlers::validate_token)
         .post("/auth/logout", handlers::logout)
+        // Models route
+        .get("/models", handlers::list_available_models)
         // API key routes
         .post("/api-keys", handlers::create_api_key)
         .get("/api-keys", handlers::list_api_keys)

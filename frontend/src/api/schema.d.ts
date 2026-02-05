@@ -324,6 +324,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Available Models
+         * @description List models available to the current user based on their user_groups
+         */
+        get: operations["list_available_models"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/usage": {
         parameters: {
             query?: never;
@@ -1092,6 +1112,41 @@ export interface operations {
                         status: string;
                         timestamp: string;
                     };
+                };
+            };
+        };
+    };
+    list_available_models: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description default return */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        created_at: string;
+                        display_name?: string | null;
+                        /** Format: uuid */
+                        id: string;
+                        input_cost_per_1k?: number | null;
+                        is_active: boolean;
+                        max_context?: number | null;
+                        model_id: string;
+                        output_cost_per_1k?: number | null;
+                        /** Format: uuid */
+                        provider_config_id: string;
+                        supports_tools: boolean;
+                        supports_vision: boolean;
+                        updated_at: string;
+                    }[];
                 };
             };
         };

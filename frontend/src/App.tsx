@@ -11,6 +11,7 @@ import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
+import Models from "@/pages/Models";
 import ApiKeys from "@/pages/ApiKeys";
 import Usage from "@/pages/Usage";
 import Profile from "@/pages/Profile";
@@ -90,6 +91,7 @@ function AppRoutes() {
         >
           <Route index element={<Navigate to="/dashboard" />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="models" element={<Models />} />
           <Route path="api-keys" element={<ApiKeys />} />
           <Route path="usage" element={<Usage />} />
           <Route path="profile" element={<Profile />} />

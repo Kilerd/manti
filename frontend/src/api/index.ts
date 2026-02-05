@@ -46,6 +46,9 @@ export const listApiKeys = fetcher.path("/api-keys").method("get").create();
 export const createApiKey = fetcher.path("/api-keys").method("post").create();
 export const revokeApiKey = fetcher.path("/api-keys/{id}").method("delete").create();
 
+// ============ Models API ============
+export const listAvailableModels = fetcher.path("/models").method("get").create();
+
 // ============ Usage API ============
 export const getUsage = fetcher.path("/usage").method("get").create();
 // Note: getUsageStats has duplicate operation name issue in schema,
@@ -85,6 +88,9 @@ export interface UsageStats {
 
 export type UsageRecord =
   operations["get_usage"]["responses"]["200"]["content"]["application/json"][number];
+
+export type AvailableModel =
+  operations["list_available_models"]["responses"]["200"]["content"]["application/json"][number];
 
 // Re-export paths
 export type { paths, operations };

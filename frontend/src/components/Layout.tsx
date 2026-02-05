@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
+  Cpu,
   Key,
   BarChart3,
   User,
@@ -27,6 +28,7 @@ export default function Layout() {
 
   const navigation: NavItem[] = [
     { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+    { name: "Models", icon: Cpu, href: "/models" },
     { name: "API Keys", icon: Key, href: "/api-keys" },
     { name: "Usage", icon: BarChart3, href: "/usage" },
     { name: "Profile", icon: User, href: "/profile" },
