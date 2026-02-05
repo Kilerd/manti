@@ -15,6 +15,8 @@ import Models from "@/pages/Models";
 import ApiKeys from "@/pages/ApiKeys";
 import Usage from "@/pages/Usage";
 import Profile from "@/pages/Profile";
+import AdminProviders from "@/pages/admin/Providers";
+import AdminUsers from "@/pages/admin/Users";
 import { useEffect, type ReactNode } from "react";
 import { toast } from "@/hooks/use-toast";
 
@@ -95,6 +97,8 @@ function AppRoutes() {
           <Route path="api-keys" element={<ApiKeys />} />
           <Route path="usage" element={<Usage />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="admin/providers" element={<AdminProviders />} />
+          <Route path="admin/users" element={<AdminUsers />} />
         </Route>
       </Routes>
     </>

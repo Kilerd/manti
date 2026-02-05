@@ -49,6 +49,22 @@ export const revokeApiKey = fetcher.path("/api-keys/{id}").method("delete").crea
 // ============ Models API ============
 export const listAvailableModels = fetcher.path("/models").method("get").create();
 
+// ============ Admin - Providers ============
+export const listAllProviders = fetcher.path("/admin/providers").method("get").create();
+export const createProvider = fetcher.path("/admin/providers").method("post").create();
+export const updateProvider = fetcher.path("/admin/providers/{id}").method("put").create();
+export const deleteProvider = fetcher.path("/admin/providers/{id}").method("delete").create();
+
+// ============ Admin - Models ============
+export const listProviderModels = fetcher.path("/admin/providers/{provider_id}/models").method("get").create();
+export const createModel = fetcher.path("/admin/providers/{provider_id}/models").method("post").create();
+export const updateModel = fetcher.path("/admin/models/{id}").method("put").create();
+export const deleteModel = fetcher.path("/admin/models/{id}").method("delete").create();
+
+// ============ Admin - Users ============
+export const listUsers = fetcher.path("/admin/users").method("get").create();
+export const updateUserGroups = fetcher.path("/admin/users/{user_id}/groups").method("put").create();
+
 // ============ Usage API ============
 export const getUsage = fetcher.path("/usage").method("get").create();
 // Note: getUsageStats has duplicate operation name issue in schema,
@@ -91,6 +107,16 @@ export type UsageRecord =
 
 export type AvailableModel =
   operations["list_available_models"]["responses"]["200"]["content"]["application/json"][number];
+
+// Admin types
+export type ProviderConfig =
+  operations["list_all_providers"]["responses"]["200"]["content"]["application/json"][number];
+
+export type AdminUser =
+  operations["list_users"]["responses"]["200"]["content"]["application/json"][number];
+
+export type ModelInfo =
+  operations["list_provider_models"]["responses"]["200"]["content"]["application/json"][number];
 
 // Re-export paths
 export type { paths, operations };

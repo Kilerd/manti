@@ -9,6 +9,8 @@ import {
   LogOut,
   Menu,
   X,
+  Server,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +34,11 @@ export default function Layout() {
     { name: "API Keys", icon: Key, href: "/api-keys" },
     { name: "Usage", icon: BarChart3, href: "/usage" },
     { name: "Profile", icon: User, href: "/profile" },
+  ];
+
+  const adminNavigation: NavItem[] = [
+    { name: "Providers", icon: Server, href: "/admin/providers" },
+    { name: "Users", icon: Users, href: "/admin/users" },
   ];
 
   return (
@@ -82,6 +89,35 @@ export default function Layout() {
                 </Link>
               );
             })}
+
+            {user?.is_admin && (
+              <>
+                <div className="pt-4 pb-2">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3">
+                    Admin
+                  </div>
+                </div>
+                {adminNavigation.map((item) => {
+                  const isActive = location.pathname === item.href;
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.href}
+                      className={cn(
+                        "flex items-center space-x-3 px-3 py-2 rounded-md transition-colors",
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-muted"
+                      )}
+                      onClick={() => setSidebarOpen(false)}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      <span>{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </>
+            )}
           </nav>
 
           <div className="p-4 border-t space-y-3">

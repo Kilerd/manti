@@ -400,7 +400,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let addr = format!("{}:{}", &settings.basic.host, &settings.basic.port);
     info!("Starting server on http://{}", addr);
 
-    Gotcha::<(), ()>::with_types::<AppState, Settings>()
+    Gotcha::with_types::<AppState, Settings>()
         .state(app_state)
         .config(settings)
         // LLM routes
@@ -441,7 +441,10 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .get("/admin/users", admin::list_users)
         .put("/admin/users/:user_id/groups", admin::update_user_groups)
         .get("/admin/users/:user_id/usage", admin::get_usage_stats)
-        .layer(gotcha::axum::middleware::from_fn_with_state(db, auth_middleware))
+        .layer(gotcha::axum::middleware::from_fn_with_state(
+            db,
+            auth_middleware,
+        ))
         .with_cors()
         .with_openapi()
         .listen(addr)
