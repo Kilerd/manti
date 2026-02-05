@@ -5,8 +5,9 @@ pub mod model_instance;
 pub mod model_registry;
 
 use async_trait::async_trait;
-use crate::models::chat::{ChatCompletionRequest, ChatCompletionResponse};
+use crate::models::chat::{ChatCompletionRequest, ChatCompletionResponse as ChatCompletion};
 use crate::models::streaming::ChatCompletionChunk;
+use crate::models::anthropic::{AnthropicRequest, AnthropicResponse, AnthropicStreamEvent};
 use futures::stream::BoxStream;
 use std::sync::Arc;
 
@@ -51,7 +52,7 @@ pub trait Provider: Send + Sync {
     async fn chat_completions(
         &self,
         request: ChatCompletionRequest,
-    ) -> crate::Result<ChatCompletionResponse>;
+    ) -> crate::Result<ChatCompletion>;
 
     /// Process streaming chat completion request
     async fn chat_completions_stream(
@@ -67,6 +68,47 @@ pub trait Provider: Send + Sync {
 
     /// Get available models
     fn get_models(&self) -> Vec<ModelConfig>;
+
+    /// Process Anthropic Messages API request (native format)
+    /// Default implementation converts to OpenAI format and calls chat_completions
+    async fn anthropic_messages(
+        &self,
+        request: AnthropicRequest,
+    ) -> crate::Result<AnthropicResponse> {
+        use crate::models::conversion::{anthropic_to_openai, anthropic_response_from_openai};
+        let mut openai_request = anthropic_to_openai(request);
+        openai_request.stream = Some(false);
+        let openai_response = self.chat_completions(openai_request).await?;
+        Ok(anthropic_response_from_openai(openai_response))
+    }
+
+    /// Process Anthropic Messages API streaming request (native format)
+    /// Default implementation converts to OpenAI format and wraps the stream
+    async fn anthropic_messages_stream(
+        &self,
+        request: AnthropicRequest,
+    ) -> crate::Result<BoxStream<'static, crate::Result<AnthropicStreamEvent>>> {
+        use crate::models::conversion::{anthropic_to_openai, openai_chunk_to_anthropic_events, StreamConversionState};
+        use futures::StreamExt;
+
+        let openai_request = anthropic_to_openai(request);
+        let openai_stream = self.chat_completions_stream(openai_request).await?;
+
+        let converted_stream = openai_stream
+            .scan(StreamConversionState::default(), |state, chunk_result| {
+                let events = match chunk_result {
+                    Ok(chunk) => openai_chunk_to_anthropic_events(chunk, state)
+                        .into_iter()
+                        .map(Ok)
+                        .collect::<Vec<_>>(),
+                    Err(e) => vec![Err(e)],
+                };
+                std::future::ready(Some(events))
+            })
+            .flat_map(futures::stream::iter);
+
+        Ok(Box::pin(converted_stream))
+    }
 }
 
 /// Provider factory

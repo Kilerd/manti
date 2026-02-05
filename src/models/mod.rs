@@ -6,6 +6,8 @@ pub mod api_key;
 pub mod usage;
 pub mod provider_config;
 pub mod model;
+pub mod anthropic;
+pub mod conversion;
 
 use conservator::{PooledConnection, Error};
 

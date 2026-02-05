@@ -32,6 +32,7 @@ use crate::models::{
     chat::ChatCompletionRequest,
     response::{ChatCompletionResponse, ModelListResponse},
     streaming::ChatCompletionChunk,
+    anthropic::{AnthropicRequest, AnthropicStreamEvent, AnthropicErrorResponse, AnthropicErrorDetail},
 };
 use crate::providers::{model_registry::ModelRegistry, ModelConfig, ProviderConfig, ProviderType};
 
@@ -352,6 +353,108 @@ async fn list_models() -> Response {
 }
 
 // ============================================================================
+// Anthropic Messages API handler
+// ============================================================================
+
+async fn anthropic_messages(Json(request): Json<AnthropicRequest>) -> Response {
+    info!(
+        "Received Anthropic messages request for model: {}",
+        request.model
+    );
+
+    // Get the model instance
+    let model_instance = match MODEL_REGISTRY.get_model(&request.model) {
+        Some(instance) => instance,
+        None => {
+            error!("Model not found: {}", request.model);
+            return Json(AnthropicErrorResponse {
+                error: AnthropicErrorDetail {
+                    r#type: "not_found_error".to_string(),
+                    message: format!("Model '{}' not found", request.model),
+                },
+            })
+            .into_response();
+        }
+    };
+
+    let is_stream = request.stream.unwrap_or(false);
+
+    if is_stream {
+        match model_instance.provider.anthropic_messages_stream(request).await {
+            Ok(stream) => {
+                let event_stream = anthropic_stream_to_sse(stream);
+                Sse::new(event_stream)
+                    .keep_alive(KeepAlive::default())
+                    .into_response()
+            }
+            Err(e) => {
+                error!("Provider error: {}", e);
+                Json(AnthropicErrorResponse {
+                    error: AnthropicErrorDetail {
+                        r#type: "api_error".to_string(),
+                        message: format!("Provider error: {}", e),
+                    },
+                })
+                .into_response()
+            }
+        }
+    } else {
+        match model_instance.provider.anthropic_messages(request).await {
+            Ok(response) => {
+                info!(
+                    "Completed Anthropic request - model: {}, tokens: {}/{}",
+                    response.model,
+                    response.usage.input_tokens,
+                    response.usage.output_tokens
+                );
+                Json(response).into_response()
+            }
+            Err(e) => {
+                error!("Provider error: {}", e);
+                Json(AnthropicErrorResponse {
+                    error: AnthropicErrorDetail {
+                        r#type: "api_error".to_string(),
+                        message: format!("Provider error: {}", e),
+                    },
+                })
+                .into_response()
+            }
+        }
+    }
+}
+
+fn anthropic_stream_to_sse(
+    mut stream: futures::stream::BoxStream<'static, Result<AnthropicStreamEvent>>,
+) -> impl Stream<Item = std::result::Result<Event, gotcha::axum::Error>> {
+    stream! {
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(event) => {
+                    let event_type = event.event_type();
+                    let data = serde_json::to_string(&event).unwrap_or_else(|e| {
+                        error!("Failed to serialize event: {}", e);
+                        "{}".to_string()
+                    });
+                    yield Ok(Event::default().event(event_type).data(data));
+                }
+                Err(e) => {
+                    error!("Error in stream: {}", e);
+                    let error_event = crate::models::anthropic::AnthropicStreamEvent::Error {
+                        error: crate::models::anthropic::StreamError {
+                            r#type: "stream_error".to_string(),
+                            message: format!("Stream error: {}", e),
+                        },
+                    };
+                    let data = serde_json::to_string(&error_event).unwrap_or_default();
+                    yield Ok(Event::default().event("error").data(data));
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -393,9 +496,11 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Gotcha::with_types::<AppState, Settings>()
         .state(app_state)
         .config(settings)
-        // LLM routes
+        // LLM routes - OpenAI format
         .post("/v1/chat/completions", chat_completions)
         .get("/v1/models", list_models)
+        // LLM routes - Anthropic format
+        .post("/v1/messages", anthropic_messages)
         // Public auth routes
         .get("/health", handlers::health_check)
         .post("/auth/register", handlers::register)

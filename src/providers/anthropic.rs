@@ -647,4 +647,109 @@ impl Provider for AnthropicProvider {
     fn get_models(&self) -> Vec<ModelConfig> {
         self.models.clone()
     }
+
+    /// Native Anthropic Messages API - direct passthrough without format conversion
+    async fn anthropic_messages(
+        &self,
+        request: crate::models::anthropic::AnthropicRequest,
+    ) -> crate::Result<crate::models::anthropic::AnthropicResponse> {
+        let url = format!("{}/messages", self.get_base_url());
+
+        let response = self
+            .client
+            .post(&url)
+            .header("x-api-key", &self.config.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| crate::MantiError::Provider(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(crate::MantiError::Provider(format!(
+                "Anthropic API error: {}",
+                error_text
+            )));
+        }
+
+        let anthropic_response: crate::models::anthropic::AnthropicResponse = response
+            .json()
+            .await
+            .map_err(|e| crate::MantiError::Provider(e.to_string()))?;
+
+        Ok(anthropic_response)
+    }
+
+    /// Native Anthropic Messages API streaming - direct passthrough
+    async fn anthropic_messages_stream(
+        &self,
+        mut request: crate::models::anthropic::AnthropicRequest,
+    ) -> crate::Result<BoxStream<'static, crate::Result<crate::models::anthropic::AnthropicStreamEvent>>> {
+        let url = format!("{}/messages", self.get_base_url());
+        request.stream = Some(true);
+
+        let response = self
+            .client
+            .post(&url)
+            .header("x-api-key", &self.config.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| crate::MantiError::Provider(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(crate::MantiError::Provider(format!(
+                "Anthropic API error: {}",
+                error_text
+            )));
+        }
+
+        // Parse SSE stream and return native Anthropic events
+        let stream = response
+            .bytes_stream()
+            .scan(String::new(), |buffer, chunk| {
+                let chunk = match chunk {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        return std::future::ready(Some(vec![Err(
+                            crate::MantiError::Provider(e.to_string()),
+                        )]));
+                    }
+                };
+
+                let text = String::from_utf8_lossy(&chunk);
+                buffer.push_str(&text);
+
+                let mut results: Vec<crate::Result<crate::models::anthropic::AnthropicStreamEvent>> = Vec::new();
+
+                while let Some(event_end) = buffer.find("\n\n") {
+                    let event_text = buffer[..event_end].to_string();
+                    *buffer = buffer[event_end + 2..].to_string();
+
+                    for line in event_text.lines() {
+                        if let Some(data) = line.strip_prefix("data: ") {
+                            if let Ok(event) = serde_json::from_str::<crate::models::anthropic::AnthropicStreamEvent>(data) {
+                                results.push(Ok(event));
+                            }
+                        }
+                    }
+                }
+
+                std::future::ready(Some(results))
+            })
+            .flat_map(stream::iter);
+
+        Ok(Box::pin(stream))
+    }
 }
