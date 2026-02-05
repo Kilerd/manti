@@ -10,6 +10,7 @@ use crate::{
     },
     reload_providers, Db,
 };
+use rust_decimal::Decimal;
 use chrono::{DateTime, Duration, Utc};
 use gotcha::axum::{
     extract::{Extension, Path, Query, State},
@@ -49,34 +50,41 @@ pub async fn create_provider(
     State(db): State<Db>,
     Json(req): Json<CreateProviderConfigRequest>,
 ) -> Result<Json<ProviderConfigInfo>, StatusCode> {
+    tracing::debug!("create_provider called with name={}, type={}", req.name, req.provider_type);
     require_admin(&auth)?;
 
     // Validate provider type
     if !ProviderConfig::is_valid_provider_type(&req.provider_type) {
+        tracing::warn!("Invalid provider type: {}", req.provider_type);
         return Err(StatusCode::BAD_REQUEST);
     }
 
     // Encrypt the API key
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
     let encrypted_key = ProviderConfig::encrypt_api_key(&req.api_key, &jwt_secret);
+    tracing::debug!("API key encrypted, creating provider config");
 
     let create_config = CreateProviderConfig {
-        provider_type: req.provider_type,
-        name: req.name,
+        provider_type: req.provider_type.clone(),
+        name: req.name.clone(),
         api_key_encrypted: encrypted_key,
-        base_url: req.base_url,
+        base_url: req.base_url.clone(),
         priority: req.priority.unwrap_or(0),
         is_active: true,
         rate_limit: req.rate_limit,
         monthly_quota: req.monthly_quota,
-        used_quota: 0.0,
-        allowed_groups: req.allowed_groups.unwrap_or_default(),
+        used_quota: Decimal::ZERO,
+        allowed_groups: req.allowed_groups.clone().unwrap_or_default(),
     };
 
+    tracing::debug!("Inserting provider config into database");
     let created = db
         .create_provider_config(create_config)
         .await
-        .map_err(|e| e.to_status_code())?;
+        .map_err(|e| {
+            tracing::error!("Failed to create provider: {:?}", e);
+            e.to_status_code()
+        })?;
 
     // Reload providers after create
     let _ = reload_providers(&db, &jwt_secret).await;
@@ -107,6 +115,8 @@ pub async fn update_provider(
         .as_ref()
         .map(|api_key| ProviderConfig::encrypt_api_key(api_key, &jwt_secret));
 
+    let monthly_quota_decimal = req.monthly_quota.map(Some);
+
     let updated = db
         .update_provider_config(
             id,
@@ -116,7 +126,7 @@ pub async fn update_provider(
             req.priority,
             req.is_active,
             req.rate_limit.map(Some),
-            req.monthly_quota.map(Some),
+            monthly_quota_decimal,
             req.allowed_groups,
         )
         .await
@@ -235,12 +245,15 @@ pub async fn update_model(
         .map_err(|e| e.to_status_code())?
         .ok_or(StatusCode::NOT_FOUND)?;
 
+    let input_cost = req.input_cost_per_1k.map(Some);
+    let output_cost = req.output_cost_per_1k.map(Some);
+
     let updated = db
         .update_model(
             model_id,
             req.display_name.map(Some),
-            req.input_cost_per_1k.map(Some),
-            req.output_cost_per_1k.map(Some),
+            input_cost,
+            output_cost,
             req.max_context.map(Some),
             req.supports_tools,
             req.supports_vision,

@@ -7,6 +7,7 @@ use crate::models::{
 };
 use chrono::{DateTime, Utc};
 use conservator::{Creatable, Domain, Executor, Migrator, PooledConnection};
+use rust_decimal::Decimal;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -299,7 +300,7 @@ impl DatabaseService {
         priority: Option<i32>,
         is_active: Option<bool>,
         rate_limit: Option<Option<i32>>,
-        monthly_quota: Option<Option<f64>>,
+        monthly_quota: Option<Option<Decimal>>,
         allowed_groups: Option<Vec<String>>,
     ) -> crate::Result<ProviderConfig> {
         // Fetch the current config, then update it
@@ -441,8 +442,8 @@ impl DatabaseService {
         &self,
         id: Uuid,
         display_name: Option<Option<String>>,
-        input_cost_per_1k: Option<Option<f64>>,
-        output_cost_per_1k: Option<Option<f64>>,
+        input_cost_per_1k: Option<Option<Decimal>>,
+        output_cost_per_1k: Option<Option<Decimal>>,
         max_context: Option<Option<i32>>,
         supports_tools: Option<bool>,
         supports_vision: Option<bool>,

@@ -454,10 +454,12 @@ export interface operations {
             content: {
                 "application/json": {
                     display_name?: string | null;
-                    input_cost_per_1k?: number | null;
+                    /** Format: decimal */
+                    input_cost_per_1k?: string | null;
                     is_active?: boolean | null;
                     max_context?: number | null;
-                    output_cost_per_1k?: number | null;
+                    /** Format: decimal */
+                    output_cost_per_1k?: string | null;
                     supports_tools?: boolean | null;
                     supports_vision?: boolean | null;
                 };
@@ -475,11 +477,13 @@ export interface operations {
                         display_name?: string | null;
                         /** Format: uuid */
                         id: string;
-                        input_cost_per_1k?: number | null;
+                        /** Format: decimal */
+                        input_cost_per_1k?: string | null;
                         is_active: boolean;
                         max_context?: number | null;
                         model_id: string;
-                        output_cost_per_1k?: number | null;
+                        /** Format: decimal */
+                        output_cost_per_1k?: string | null;
                         /** Format: uuid */
                         provider_config_id: string;
                         supports_tools: boolean;
@@ -534,13 +538,15 @@ export interface operations {
                         /** Format: uuid */
                         id: string;
                         is_active: boolean;
-                        monthly_quota?: number | null;
+                        /** Format: decimal */
+                        monthly_quota?: string | null;
                         name: string;
                         priority: number;
                         provider_type: string;
                         rate_limit?: number | null;
                         updated_at: string;
-                        used_quota: number;
+                        /** Format: decimal */
+                        used_quota: string;
                     }[];
                 };
             };
@@ -559,7 +565,8 @@ export interface operations {
                     allowed_groups?: string[] | null;
                     api_key: string;
                     base_url?: string | null;
-                    monthly_quota?: number | null;
+                    /** Format: decimal */
+                    monthly_quota?: string | null;
                     name: string;
                     priority?: number | null;
                     provider_type: string;
@@ -581,13 +588,15 @@ export interface operations {
                         /** Format: uuid */
                         id: string;
                         is_active: boolean;
-                        monthly_quota?: number | null;
+                        /** Format: decimal */
+                        monthly_quota?: string | null;
                         name: string;
                         priority: number;
                         provider_type: string;
                         rate_limit?: number | null;
                         updated_at: string;
-                        used_quota: number;
+                        /** Format: decimal */
+                        used_quota: string;
                     };
                 };
             };
@@ -609,7 +618,8 @@ export interface operations {
                     api_key?: string | null;
                     base_url?: string | null;
                     is_active?: boolean | null;
-                    monthly_quota?: number | null;
+                    /** Format: decimal */
+                    monthly_quota?: string | null;
                     name?: string | null;
                     priority?: number | null;
                     rate_limit?: number | null;
@@ -630,13 +640,15 @@ export interface operations {
                         /** Format: uuid */
                         id: string;
                         is_active: boolean;
-                        monthly_quota?: number | null;
+                        /** Format: decimal */
+                        monthly_quota?: string | null;
                         name: string;
                         priority: number;
                         provider_type: string;
                         rate_limit?: number | null;
                         updated_at: string;
-                        used_quota: number;
+                        /** Format: decimal */
+                        used_quota: string;
                     };
                 };
             };
@@ -686,11 +698,13 @@ export interface operations {
                         display_name?: string | null;
                         /** Format: uuid */
                         id: string;
-                        input_cost_per_1k?: number | null;
+                        /** Format: decimal */
+                        input_cost_per_1k?: string | null;
                         is_active: boolean;
                         max_context?: number | null;
                         model_id: string;
-                        output_cost_per_1k?: number | null;
+                        /** Format: decimal */
+                        output_cost_per_1k?: string | null;
                         /** Format: uuid */
                         provider_config_id: string;
                         supports_tools: boolean;
@@ -715,10 +729,12 @@ export interface operations {
             content: {
                 "application/json": {
                     display_name?: string | null;
-                    input_cost_per_1k?: number | null;
+                    /** Format: decimal */
+                    input_cost_per_1k?: string | null;
                     max_context?: number | null;
                     model_id: string;
-                    output_cost_per_1k?: number | null;
+                    /** Format: decimal */
+                    output_cost_per_1k?: string | null;
                     supports_tools?: boolean | null;
                     supports_vision?: boolean | null;
                 };
@@ -736,11 +752,13 @@ export interface operations {
                         display_name?: string | null;
                         /** Format: uuid */
                         id: string;
-                        input_cost_per_1k?: number | null;
+                        /** Format: decimal */
+                        input_cost_per_1k?: string | null;
                         is_active: boolean;
                         max_context?: number | null;
                         model_id: string;
-                        output_cost_per_1k?: number | null;
+                        /** Format: decimal */
+                        output_cost_per_1k?: string | null;
                         /** Format: uuid */
                         provider_config_id: string;
                         supports_tools: boolean;
@@ -1152,11 +1170,13 @@ export interface operations {
                         display_name?: string | null;
                         /** Format: uuid */
                         id: string;
-                        input_cost_per_1k?: number | null;
+                        /** Format: decimal */
+                        input_cost_per_1k?: string | null;
                         is_active: boolean;
                         max_context?: number | null;
                         model_id: string;
-                        output_cost_per_1k?: number | null;
+                        /** Format: decimal */
+                        output_cost_per_1k?: string | null;
                         /** Format: uuid */
                         provider_config_id: string;
                         supports_tools: boolean;
@@ -1189,12 +1209,11 @@ export interface operations {
                         /** Format: uuid */
                         api_key_id?: string | null;
                         completion_tokens: number;
-                        cost: number;
+                        /** Format: decimal */
+                        cost: string;
                         created_at: string;
                         /** Format: uuid */
                         id: string;
-                        /** Format: json */
-                        metadata?: Record<string, never> | null;
                         model: string;
                         prompt_tokens: number;
                         provider: string;

@@ -207,7 +207,7 @@ export default function AdminProviders() {
           base_url: formData.base_url || undefined,
           priority: formData.priority,
           rate_limit: formData.rate_limit ? parseInt(formData.rate_limit) : undefined,
-          monthly_quota: formData.monthly_quota ? parseFloat(formData.monthly_quota) : undefined,
+          monthly_quota: formData.monthly_quota || undefined,
           allowed_groups: allowedGroups,
           is_active: true,
         });
@@ -220,7 +220,7 @@ export default function AdminProviders() {
           base_url: formData.base_url || undefined,
           priority: formData.priority,
           rate_limit: formData.rate_limit ? parseInt(formData.rate_limit) : undefined,
-          monthly_quota: formData.monthly_quota ? parseFloat(formData.monthly_quota) : undefined,
+          monthly_quota: formData.monthly_quota || undefined,
           allowed_groups: allowedGroups.length > 0 ? allowedGroups : undefined,
         });
         toast({ title: "Success", description: "Provider created successfully." });
@@ -288,12 +288,8 @@ export default function AdminProviders() {
         provider_id: expandedProvider,
         model_id: modelFormData.model_id,
         display_name: modelFormData.display_name || undefined,
-        input_cost_per_1k: modelFormData.input_cost_per_1k
-          ? parseFloat(modelFormData.input_cost_per_1k)
-          : undefined,
-        output_cost_per_1k: modelFormData.output_cost_per_1k
-          ? parseFloat(modelFormData.output_cost_per_1k)
-          : undefined,
+        input_cost_per_1k: modelFormData.input_cost_per_1k || undefined,
+        output_cost_per_1k: modelFormData.output_cost_per_1k || undefined,
         max_context: modelFormData.max_context
           ? parseInt(modelFormData.max_context)
           : undefined,

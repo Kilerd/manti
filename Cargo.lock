@@ -757,7 +757,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -951,7 +951,7 @@ dependencies = [
 [[package]]
 name = "gotcha"
 version = "0.2.2"
-source = "git+https://github.com/Kilerd/gotcha.git?branch=main#584ae41dfc076d79ab4f77555ccf6f34dd521817"
+source = "git+https://github.com/Kilerd/gotcha.git?branch=main#7545a69c0f6620b8c632832e300431e85b676e93"
 dependencies = [
  "async-trait",
  "axum",
@@ -969,6 +969,7 @@ dependencies = [
  "oas",
  "once_cell",
  "regex",
+ "rust_decimal",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -984,7 +985,7 @@ dependencies = [
 [[package]]
 name = "gotcha_macro"
 version = "0.2.0"
-source = "git+https://github.com/Kilerd/gotcha.git?branch=main#584ae41dfc076d79ab4f77555ccf6f34dd521817"
+source = "git+https://github.com/Kilerd/gotcha.git?branch=main#7545a69c0f6620b8c632832e300431e85b676e93"
 dependencies = [
  "darling 0.14.4",
  "proc-macro-error",
@@ -1542,6 +1543,7 @@ dependencies = [
  "once_cell",
  "rand 0.8.5",
  "reqwest",
+ "rust_decimal",
  "serde",
  "serde_json",
  "sha2",
@@ -2336,7 +2338,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2755,7 +2757,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

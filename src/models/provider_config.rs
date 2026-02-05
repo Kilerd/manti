@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use conservator::{Domain, Creatable};
 use gotcha::Schematic;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -20,8 +21,8 @@ pub struct ProviderConfig {
     pub priority: i32,
     pub is_active: bool,
     pub rate_limit: Option<i32>,
-    pub monthly_quota: Option<f64>,
-    pub used_quota: f64,
+    pub monthly_quota: Option<Decimal>,
+    pub used_quota: Decimal,
     pub allowed_groups: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -37,8 +38,8 @@ pub struct CreateProviderConfig {
     pub priority: i32,
     pub is_active: bool,
     pub rate_limit: Option<i32>,
-    pub monthly_quota: Option<f64>,
-    pub used_quota: f64,
+    pub monthly_quota: Option<Decimal>,
+    pub used_quota: Decimal,
     pub allowed_groups: Vec<String>,
 }
 
@@ -50,7 +51,7 @@ pub struct CreateProviderConfigRequest {
     pub base_url: Option<String>,
     pub priority: Option<i32>,
     pub rate_limit: Option<i32>,
-    pub monthly_quota: Option<f64>,
+    pub monthly_quota: Option<Decimal>,
     pub allowed_groups: Option<Vec<String>>,
 }
 
@@ -62,7 +63,7 @@ pub struct UpdateProviderConfigRequest {
     pub priority: Option<i32>,
     pub is_active: Option<bool>,
     pub rate_limit: Option<i32>,
-    pub monthly_quota: Option<f64>,
+    pub monthly_quota: Option<Decimal>,
     pub allowed_groups: Option<Vec<String>>,
 }
 
@@ -75,8 +76,8 @@ pub struct ProviderConfigInfo {
     pub priority: i32,
     pub is_active: bool,
     pub rate_limit: Option<i32>,
-    pub monthly_quota: Option<f64>,
-    pub used_quota: f64,
+    pub monthly_quota: Option<Decimal>,
+    pub used_quota: Decimal,
     pub allowed_groups: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -123,7 +124,7 @@ impl ProviderConfig {
             is_active: true,
             rate_limit: None,
             monthly_quota: None,
-            used_quota: 0.0,
+            used_quota: Decimal::ZERO,
             allowed_groups: vec![],
             created_at: now,
             updated_at: now,

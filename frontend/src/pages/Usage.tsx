@@ -154,7 +154,7 @@ export default function Usage() {
                     <TableCell>{record.prompt_tokens.toLocaleString()}</TableCell>
                     <TableCell>{record.completion_tokens.toLocaleString()}</TableCell>
                     <TableCell>{record.total_tokens.toLocaleString()}</TableCell>
-                    <TableCell>${record.cost.toFixed(4)}</TableCell>
+                    <TableCell>${parseFloat(record.cost).toFixed(4)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

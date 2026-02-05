@@ -143,8 +143,12 @@ pub async fn reload_providers(db: &DatabaseService, jwt_secret: &str) -> Result<
             let model_config = ModelConfig {
                 id: model.model_id.clone(),
                 provider: db_config.name.clone(),
-                input_cost_per_1k: model.input_cost_per_1k.unwrap_or(0.0),
-                output_cost_per_1k: model.output_cost_per_1k.unwrap_or(0.0),
+                input_cost_per_1k: model.input_cost_per_1k
+                    .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0))
+                    .unwrap_or(0.0),
+                output_cost_per_1k: model.output_cost_per_1k
+                    .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0))
+                    .unwrap_or(0.0),
                 max_context: model.max_context.unwrap_or(4096),
                 supports_tools: model.supports_tools,
                 supports_vision: model.supports_vision,

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use conservator::{Domain, Creatable};
 use gotcha::Schematic;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -13,8 +14,8 @@ pub struct Model {
     pub provider_config_id: Uuid,
     pub model_id: String,
     pub display_name: Option<String>,
-    pub input_cost_per_1k: Option<f64>,
-    pub output_cost_per_1k: Option<f64>,
+    pub input_cost_per_1k: Option<Decimal>,
+    pub output_cost_per_1k: Option<Decimal>,
     pub max_context: Option<i32>,
     pub supports_tools: bool,
     pub supports_vision: bool,
@@ -29,8 +30,8 @@ pub struct CreateModel {
     pub provider_config_id: Uuid,
     pub model_id: String,
     pub display_name: Option<String>,
-    pub input_cost_per_1k: Option<f64>,
-    pub output_cost_per_1k: Option<f64>,
+    pub input_cost_per_1k: Option<Decimal>,
+    pub output_cost_per_1k: Option<Decimal>,
     pub max_context: Option<i32>,
     pub supports_tools: bool,
     pub supports_vision: bool,
@@ -42,8 +43,8 @@ pub struct CreateModel {
 pub struct CreateModelRequest {
     pub model_id: String,
     pub display_name: Option<String>,
-    pub input_cost_per_1k: Option<f64>,
-    pub output_cost_per_1k: Option<f64>,
+    pub input_cost_per_1k: Option<Decimal>,
+    pub output_cost_per_1k: Option<Decimal>,
     pub max_context: Option<i32>,
     pub supports_tools: Option<bool>,
     pub supports_vision: Option<bool>,
@@ -53,8 +54,8 @@ pub struct CreateModelRequest {
 #[derive(Debug, Clone, Deserialize, Schematic)]
 pub struct UpdateModelRequest {
     pub display_name: Option<String>,
-    pub input_cost_per_1k: Option<f64>,
-    pub output_cost_per_1k: Option<f64>,
+    pub input_cost_per_1k: Option<Decimal>,
+    pub output_cost_per_1k: Option<Decimal>,
     pub max_context: Option<i32>,
     pub supports_tools: Option<bool>,
     pub supports_vision: Option<bool>,
@@ -68,8 +69,8 @@ pub struct ModelInfo {
     pub provider_config_id: Uuid,
     pub model_id: String,
     pub display_name: Option<String>,
-    pub input_cost_per_1k: Option<f64>,
-    pub output_cost_per_1k: Option<f64>,
+    pub input_cost_per_1k: Option<Decimal>,
+    pub output_cost_per_1k: Option<Decimal>,
     pub max_context: Option<i32>,
     pub supports_tools: bool,
     pub supports_vision: bool,

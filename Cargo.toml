@@ -52,6 +52,9 @@ anyhow = "1"
 # UUID
 uuid = { version = "1", features = ["v4", "serde"] }
 
+# Decimal for precise money calculations
+rust_decimal = { version = "1", features = ["db-tokio-postgres", "serde"] }
+
 # Time
 time = { version = "0.3", features = ["serde", "formatting"] }
 chrono = { version = "0.4", features = ["serde"] }

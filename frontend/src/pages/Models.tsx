@@ -42,9 +42,10 @@ export default function Models() {
     }
   };
 
-  const formatCost = (cost: number | null | undefined) => {
+  const formatCost = (cost: string | null | undefined) => {
     if (cost == null) return "-";
-    return `$${cost.toFixed(4)}`;
+    const num = parseFloat(cost);
+    return isNaN(num) ? "-" : `$${num.toFixed(4)}`;
   };
 
   const formatContext = (context: number | null | undefined) => {

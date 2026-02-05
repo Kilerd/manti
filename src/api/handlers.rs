@@ -3,7 +3,7 @@ use crate::{
     models::{
         api_key::{ApiKeyInfo, ApiKeyResponse, CreateApiKey, CreateApiKeyRequest},
         model::ModelInfo,
-        usage::Usage,
+        usage::UsageInfo,
         user::{CreateUser, CreateUserRequest, LoginRequest, LoginResponse, UserInfo},
     },
     Db,
@@ -319,7 +319,7 @@ pub async fn get_usage(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
     Query(query): Query<UsageQuery>,
-) -> Result<Json<Vec<Usage>>, StatusCode> {
+) -> Result<Json<Vec<UsageInfo>>, StatusCode> {
     let user_id = auth.require_auth()?;
     // Default to last 30 days if not specified
     let end = query.end.unwrap_or_else(Utc::now);
@@ -330,7 +330,7 @@ pub async fn get_usage(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(usage))
+    Ok(Json(usage.into_iter().map(|u| u.into()).collect()))
 }
 
 /// Dashboard stats response
