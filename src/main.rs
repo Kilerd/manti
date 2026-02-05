@@ -395,7 +395,6 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .config(settings)
         // LLM routes
         .post("/v1/chat/completions", chat_completions)
-        .post("")
         .get("/v1/models", list_models)
         // Public auth routes
         .get("/health", handlers::health_check)
