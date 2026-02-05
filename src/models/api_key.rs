@@ -13,15 +13,14 @@ pub struct ApiKey {
     pub id: Uuid,
     pub user_id: Uuid,
     pub name: String,
-    pub key_hash: String,
-    pub prefix: String,  // First 8 chars of key for identification
+    pub key: String,
     pub is_active: bool,
     pub last_used: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub rate_limit_rpm: Option<i32>,  // Requests per minute
-    pub allowed_models: Option<JsonValue>,  // Store as JSONB in database
+    pub rate_limit_rpm: Option<i32>,
+    pub allowed_models: Option<JsonValue>,
 }
 
 /// DTO for creating new API keys
@@ -29,8 +28,7 @@ pub struct ApiKey {
 pub struct CreateApiKey {
     pub user_id: Uuid,
     pub name: String,
-    pub key_hash: String,
-    pub prefix: String,
+    pub key: String,
     pub is_active: bool,
     pub expires_at: Option<DateTime<Utc>>,
     pub rate_limit_rpm: Option<i32>,
@@ -39,60 +37,29 @@ pub struct CreateApiKey {
 
 impl CreateApiKey {
     /// Generate a new API key DTO
-    pub fn generate(user_id: Uuid, name: String, expires_at: Option<DateTime<Utc>>, rate_limit_rpm: Option<i32>, allowed_models: Option<Vec<String>>) -> crate::Result<(Self, String)> {
-        let raw_key = generate_api_key();
-        let key_hash = hash_api_key(&raw_key);
-        // prefix 用于显示，取随机部分的前 8 位
-        let prefix = raw_key.strip_prefix("sk-manti-").unwrap_or(&raw_key).chars().take(8).collect::<String>();
-
+    pub fn generate(
+        user_id: Uuid,
+        name: String,
+        expires_at: Option<DateTime<Utc>>,
+        rate_limit_rpm: Option<i32>,
+        allowed_models: Option<Vec<String>>,
+    ) -> Self {
+        let key = generate_api_key();
         let allowed_models_json = allowed_models.map(|models| serde_json::to_value(models).unwrap());
 
-        let create_key = Self {
+        Self {
             user_id,
             name,
-            key_hash,
-            prefix,
+            key,
             is_active: true,
             expires_at,
-            rate_limit_rpm: rate_limit_rpm.or(Some(60)),  // Default 60 requests per minute
+            rate_limit_rpm: rate_limit_rpm.or(Some(60)),
             allowed_models: allowed_models_json,
-        };
-
-        Ok((create_key, raw_key))
+        }
     }
 }
 
 impl ApiKey {
-    /// Generate a new API key (backward compatibility)
-    pub fn generate(user_id: Uuid, name: String) -> crate::Result<(Self, String)> {
-        let raw_key = generate_api_key();
-        let key_hash = hash_api_key(&raw_key);
-        // prefix 用于显示，取随机部分的前 8 位
-        let prefix = raw_key.strip_prefix("sk-manti-").unwrap_or(&raw_key).chars().take(8).collect::<String>();
-
-        let api_key = Self {
-            id: Uuid::new_v4(),
-            user_id,
-            name,
-            key_hash,
-            prefix,
-            is_active: true,
-            last_used: None,
-            expires_at: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            rate_limit_rpm: Some(60),  // Default 60 requests per minute
-            allowed_models: None,
-        };
-
-        Ok((api_key, raw_key))
-    }
-
-    /// Verify an API key
-    pub fn verify(&self, key: &str) -> bool {
-        verify_api_key(key, &self.key_hash)
-    }
-
     /// Check if the key is expired
     pub fn is_expired(&self) -> bool {
         if let Some(expires_at) = self.expires_at {
@@ -107,12 +74,6 @@ impl ApiKey {
         self.is_active && !self.is_expired()
     }
 
-    /// Update last used timestamp
-    pub fn update_last_used(&mut self) {
-        self.last_used = Some(Utc::now());
-        self.updated_at = Utc::now();
-    }
-
     /// Check if a model is allowed for this key
     pub fn is_model_allowed(&self, model: &str) -> bool {
         match &self.allowed_models {
@@ -120,10 +81,10 @@ impl ApiKey {
                 if let Ok(models) = serde_json::from_value::<Vec<String>>(json_models.clone()) {
                     models.contains(&model.to_string())
                 } else {
-                    true  // If we can't parse, allow by default
+                    true
                 }
             }
-            None => true,  // No restrictions means all models are allowed
+            None => true,
         }
     }
 
@@ -155,23 +116,6 @@ fn generate_api_key() -> String {
     format!("sk-manti-{}", key)
 }
 
-/// Hash an API key
-pub fn hash_api_key(key: &str) -> String {
-    use sha2::{Sha256, Digest};
-
-    let mut hasher = Sha256::new();
-    hasher.update(key.as_bytes());
-    let result = hasher.finalize();
-
-    format!("{:x}", result)
-}
-
-/// Verify an API key against a hash
-fn verify_api_key(key: &str, hash: &str) -> bool {
-    let computed_hash = hash_api_key(key);
-    computed_hash == hash
-}
-
 /// API key creation request
 #[derive(Debug, Clone, Deserialize, Schematic)]
 pub struct CreateApiKeyRequest {
@@ -181,27 +125,33 @@ pub struct CreateApiKeyRequest {
     pub allowed_models: Option<Vec<String>>,
 }
 
-/// API key response (for creation only, includes the raw key once)
-#[derive(Debug, Clone, Serialize, Schematic)]
-pub struct ApiKeyResponse {
-    pub id: Uuid,
-    pub name: String,
-    pub key: String,  // Only returned on creation
-    pub prefix: String,
-    pub created_at: DateTime<Utc>,
-    pub expires_at: Option<DateTime<Utc>>,
-}
-
-/// API key info (without sensitive data)
+/// API key info for listing
 #[derive(Debug, Clone, Serialize, Schematic)]
 pub struct ApiKeyInfo {
     pub id: Uuid,
     pub name: String,
-    pub prefix: String,
+    pub key: String,
     pub is_active: bool,
     pub last_used: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub rate_limit_rpm: Option<i32>,
     pub allowed_models: Option<Vec<String>>,
+}
+
+impl From<ApiKey> for ApiKeyInfo {
+    fn from(api_key: ApiKey) -> Self {
+        let allowed_models = api_key.get_allowed_models();
+        Self {
+            id: api_key.id,
+            name: api_key.name,
+            key: api_key.key,
+            is_active: api_key.is_active,
+            last_used: api_key.last_used,
+            expires_at: api_key.expires_at,
+            created_at: api_key.created_at,
+            rate_limit_rpm: api_key.rate_limit_rpm,
+            allowed_models,
+        }
+    }
 }

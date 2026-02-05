@@ -901,9 +901,9 @@ export interface operations {
                         /** Format: uuid */
                         id: string;
                         is_active: boolean;
+                        key: string;
                         last_used?: string | null;
                         name: string;
-                        prefix: string;
                         rate_limit_rpm?: number | null;
                     }[];
                 };
@@ -936,13 +936,16 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        allowed_models?: string[] | null;
                         created_at: string;
                         expires_at?: string | null;
                         /** Format: uuid */
                         id: string;
+                        is_active: boolean;
                         key: string;
+                        last_used?: string | null;
                         name: string;
-                        prefix: string;
+                        rate_limit_rpm?: number | null;
                     };
                 };
             };

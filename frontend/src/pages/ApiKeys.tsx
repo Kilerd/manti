@@ -32,41 +32,25 @@ import {
   createApiKey,
   revokeApiKey,
   type ApiKeyListItem,
-  type ApiKeyCreateResponse,
 } from "@/api";
 import { toast } from "@/hooks/use-toast";
-import { Copy, Trash2, Plus, AlertCircle } from "lucide-react";
+import { Copy, Trash2, Plus, Eye, EyeOff } from "lucide-react";
 
 export default function ApiKeys() {
   const [apiKeys, setApiKeys] = useState<ApiKeyListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
-  const [newKey, setNewKey] = useState<ApiKeyCreateResponse | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [keyToDelete, setKeyToDelete] = useState<{
     id: string;
     name: string;
   } | null>(null);
+  const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchApiKeys();
   }, []);
-
-  useEffect(() => {
-    if (newKey) {
-      const timer = setTimeout(() => {
-        setNewKey(null);
-        toast({
-          title: "Key Dismissed",
-          description:
-            "The API key display has been automatically closed for security.",
-        });
-      }, 30000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [newKey]);
 
   const fetchApiKeys = async () => {
     try {
@@ -91,16 +75,10 @@ export default function ApiKeys() {
       const response = await createApiKey({ name: newKeyName });
       const data = response.data;
 
-      setNewKey(data);
-      const listItem: ApiKeyListItem = {
-        id: data.id,
-        name: data.name,
-        prefix: data.prefix,
-        created_at: data.created_at,
-        is_active: true,
-      };
-      setApiKeys([...apiKeys, listItem]);
+      setApiKeys([...apiKeys, data]);
       setNewKeyName("");
+      // Auto-show the new key
+      setVisibleKeys((prev) => new Set(prev).add(data.id));
 
       toast({
         title: "API Key Created",
@@ -170,10 +148,28 @@ export default function ApiKeys() {
       });
   };
 
+  const toggleKeyVisibility = (keyId: string) => {
+    setVisibleKeys((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(keyId)) {
+        newSet.delete(keyId);
+      } else {
+        newSet.add(keyId);
+      }
+      return newSet;
+    });
+  };
+
   const handleKeyPress = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleCreateKey();
     }
+  };
+
+  const maskKey = (key: string) => {
+    // Show first 12 chars and last 4 chars
+    if (key.length <= 20) return key;
+    return `${key.slice(0, 12)}...${key.slice(-4)}`;
   };
 
   if (loading) {
@@ -192,38 +188,6 @@ export default function ApiKeys() {
           Manage your API keys for accessing the LLM Gateway
         </p>
       </div>
-
-      {newKey && (
-        <Card className="border-green-500 bg-green-50 dark:bg-green-950">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5" />
-              New API Key Created
-            </CardTitle>
-            <CardDescription>
-              Save this key now. You won't be able to see it again!
-              <br />
-              <span className="text-xs">
-                This display will auto-close in 30 seconds for security.
-              </span>
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Input value={newKey.key} readOnly className="font-mono" />
-              <Button
-                size="icon"
-                onClick={() => copyToClipboard(newKey.key, newKey.name)}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
-            <Button onClick={() => setNewKey(null)} className="w-full">
-              I've saved this key
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>
@@ -284,7 +248,11 @@ export default function ApiKeys() {
                     <TableCell className="font-medium">{apiKey.name}</TableCell>
                     <TableCell className="font-mono text-sm">
                       <div className="flex items-center space-x-2">
-                        <span>{apiKey.prefix}...</span>
+                        <span className="max-w-[300px] truncate">
+                          {visibleKeys.has(apiKey.id)
+                            ? apiKey.key
+                            : maskKey(apiKey.key)}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -300,9 +268,32 @@ export default function ApiKeys() {
                         <Button
                           size="icon"
                           variant="ghost"
+                          onClick={() => toggleKeyVisibility(apiKey.id)}
+                          title={
+                            visibleKeys.has(apiKey.id) ? "Hide key" : "Show key"
+                          }
+                        >
+                          {visibleKeys.has(apiKey.id) ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => copyToClipboard(apiKey.key, apiKey.name)}
+                          title="Copy to clipboard"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
                           onClick={() =>
                             confirmDeleteKey(apiKey.id, apiKey.name)
                           }
+                          title="Delete key"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

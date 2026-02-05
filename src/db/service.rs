@@ -103,42 +103,25 @@ impl DatabaseService {
             .map_err(|e| crate::MantiError::Database(e))
     }
 
-    /// Find an API key by its prefix and verify with hash
-    pub async fn find_and_verify_api_key(&self, key: &str) -> crate::Result<Option<ApiKey>> {
-        // Extract prefix for faster lookup
-        let prefix = key.chars().take(8).collect::<String>();
-
+    /// Find an API key by its value
+    pub async fn find_api_key(&self, key: &str) -> crate::Result<Option<ApiKey>> {
         let api_key = ApiKey::select()
             .filter(
-                ApiKey::COLUMNS.prefix.eq(prefix)
+                ApiKey::COLUMNS.key.eq(key.to_string())
                     & ApiKey::COLUMNS.is_active.eq(true)
             )
             .optional(&*self.pool)
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
 
-        if let Some(api_key) = api_key {
-            // Verify the full key
-            if api_key.verify(key) && api_key.is_valid() {
-                Ok(Some(api_key))
-            } else {
-                Ok(None)
+        // Check if valid (not expired)
+        if let Some(ref k) = api_key {
+            if !k.is_valid() {
+                return Ok(None);
             }
-        } else {
-            Ok(None)
         }
-    }
 
-    /// Find an API key by hash
-    pub async fn find_api_key_by_hash(&self, key_hash: &str) -> crate::Result<Option<ApiKey>> {
-        ApiKey::select()
-            .filter(
-                ApiKey::COLUMNS.key_hash.eq(key_hash.to_string())
-                    & ApiKey::COLUMNS.is_active.eq(true)
-            )
-            .optional(&*self.pool)
-            .await
-            .map_err(|e| crate::MantiError::Database(e))
+        Ok(api_key)
     }
 
     /// List all API keys for a user

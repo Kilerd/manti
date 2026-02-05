@@ -1,7 +1,7 @@
 use crate::{
     auth::{AuthContext, JwtConfig},
     models::{
-        api_key::{ApiKeyInfo, ApiKeyResponse, CreateApiKey, CreateApiKeyRequest},
+        api_key::{ApiKeyInfo, CreateApiKey, CreateApiKeyRequest},
         model::ModelInfo,
         usage::UsageInfo,
         user::{CreateUser, CreateUserRequest, LoginRequest, LoginResponse, UserInfo},
@@ -224,37 +224,26 @@ pub async fn create_api_key(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
     Json(req): Json<CreateApiKeyRequest>,
-) -> Result<Json<ApiKeyResponse>, StatusCode> {
+) -> Result<Json<ApiKeyInfo>, StatusCode> {
     let user_id = auth.require_auth()?;
-    // Calculate expires_at from expires_in_days
     let expires_at = req
         .expires_in_days
         .map(|days| Utc::now() + Duration::days(days));
 
-    // Generate new API key using CreateApiKey
-    let (create_api_key, raw_key) = CreateApiKey::generate(
+    let create_api_key = CreateApiKey::generate(
         user_id,
         req.name,
         expires_at,
         req.rate_limit_rpm,
         req.allowed_models,
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    );
 
-    // Save to database
     let saved_key = db
         .create_api_key(create_api_key)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(ApiKeyResponse {
-        id: saved_key.id,
-        name: saved_key.name,
-        key: raw_key, // Only returned on creation
-        prefix: saved_key.prefix,
-        created_at: saved_key.created_at,
-        expires_at: saved_key.expires_at,
-    }))
+    Ok(Json(saved_key.into()))
 }
 
 /// List user's API keys
@@ -269,25 +258,7 @@ pub async fn list_api_keys(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let key_infos: Vec<ApiKeyInfo> = keys
-        .into_iter()
-        .map(|k| {
-            let allowed_models = k.get_allowed_models();
-            ApiKeyInfo {
-                id: k.id,
-                name: k.name,
-                prefix: k.prefix,
-                is_active: k.is_active,
-                last_used: k.last_used,
-                expires_at: k.expires_at,
-                created_at: k.created_at,
-                rate_limit_rpm: k.rate_limit_rpm,
-                allowed_models,
-            }
-        })
-        .collect();
-
-    Ok(Json(key_infos))
+    Ok(Json(keys.into_iter().map(|k| k.into()).collect()))
 }
 
 /// Revoke an API key

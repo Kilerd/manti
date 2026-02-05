@@ -1,4 +1,4 @@
-use crate::models::{api_key::hash_api_key, user::User};
+use crate::models::user::User;
 use crate::Db;
 use gotcha::axum::{
     extract::{Request, State},
@@ -133,10 +133,9 @@ pub async fn auth_middleware(
     debug!("token is {token}");
 
     let context = if token.starts_with("sk-manti-") {
-        // Hash the token and lookup by hash
-        let key_hash = hash_api_key(token);
-        match db.find_api_key_by_hash(&key_hash).await {
-            Ok(Some(api_key)) if api_key.is_valid() => {
+        // Lookup API key directly
+        match db.find_api_key(token).await {
+            Ok(Some(api_key)) => {
                 let _ = db.update_api_key_last_used(api_key.id).await;
                 AuthContext::ApiKey {
                     user_id: api_key.user_id,
