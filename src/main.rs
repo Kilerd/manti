@@ -280,6 +280,11 @@ async fn chat_completions(
         Err(response) => return response,
     };
 
+    info!(
+        "Auth context: user_id={:?}, api_key_id={:?}",
+        user_id, api_key_id
+    );
+
     // Get the model instance
     let model_instance = match MODEL_REGISTRY.get_model(&request.model) {
         Some(instance) => instance,
@@ -357,6 +362,7 @@ async fn chat_completions(
                 // Record usage
                 if let Some(uid) = user_id {
                     if let Some(recorder) = USAGE_RECORDER.get() {
+                        info!("Recording usage for user: {}", uid);
                         let create_usage = CreateUsage::new(
                             uid,
                             api_key_id,
@@ -367,7 +373,11 @@ async fn chat_completions(
                             cost,
                         );
                         recorder.record(create_usage);
+                    } else {
+                        error!("USAGE_RECORDER not initialized!");
                     }
+                } else {
+                    info!("Skipping usage recording: no user_id (unauthenticated request)");
                 }
 
                 info!(
@@ -562,6 +572,11 @@ async fn anthropic_messages(
         Err(response) => return response,
     };
 
+    info!(
+        "Auth context: user_id={:?}, api_key_id={:?}",
+        user_id, api_key_id
+    );
+
     // Get the model instance
     let model_instance = match MODEL_REGISTRY.get_model(&request.model) {
         Some(instance) => instance,
@@ -654,6 +669,7 @@ async fn anthropic_messages(
                 // Record usage
                 if let Some(uid) = user_id {
                     if let Some(recorder) = USAGE_RECORDER.get() {
+                        info!("Recording Anthropic usage for user: {}", uid);
                         let cost = model_instance.calculate_cost(
                             response.usage.input_tokens,
                             response.usage.output_tokens,
@@ -668,7 +684,11 @@ async fn anthropic_messages(
                             cost,
                         );
                         recorder.record(create_usage);
+                    } else {
+                        error!("USAGE_RECORDER not initialized!");
                     }
+                } else {
+                    info!("Skipping Anthropic usage recording: no user_id (unauthenticated request)");
                 }
 
                 info!(

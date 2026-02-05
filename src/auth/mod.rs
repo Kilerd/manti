@@ -6,7 +6,7 @@ use gotcha::axum::{
     middleware::Next,
     response::Response,
 };
-use gotcha::tracing::debug;
+use gotcha::tracing::{debug, error, info, warn};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -110,46 +110,83 @@ impl JwtConfig {
 }
 
 /// Authentication middleware
+/// Supports both OpenAI format (Authorization: Bearer) and Anthropic format (x-api-key)
 pub async fn auth_middleware(
     State(db): State<Db>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    // Try Authorization header first (OpenAI format)
     let auth_header = request
         .headers()
         .get(AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
 
-    let Some(auth_header) = auth_header else {
+    // Also check x-api-key header (Anthropic format)
+    let x_api_key = request
+        .headers()
+        .get("x-api-key")
+        .and_then(|h| h.to_str().ok());
+
+    info!(
+        "Auth headers - Authorization: {:?}, x-api-key: {:?}",
+        auth_header.map(|s| &s[..s.len().min(30)]),
+        x_api_key.map(|s| &s[..s.len().min(30)])
+    );
+
+    // Extract token from either header
+    let token = if let Some(auth) = auth_header {
+        auth.strip_prefix("Bearer ").map(|s| s.to_string())
+    } else {
+        None
+    }
+    .or_else(|| x_api_key.map(|s| s.to_string()));
+
+    let Some(token) = token else {
         request.extensions_mut().insert(AuthContext::None);
         return Ok(next.run(request).await);
     };
 
-    let Some(token) = auth_header.strip_prefix("Bearer ") else {
-        request.extensions_mut().insert(AuthContext::None);
-        return Ok(next.run(request).await);
-    };
-
-    debug!("token is {token}");
+    debug!(
+        "Processing auth token: {}...",
+        &token[..token.len().min(20)]
+    );
 
     let context = if token.starts_with("sk-manti-") {
-        // Lookup API key directly
-        match db.find_api_key(token).await {
+        debug!("Token identified as API key");
+        match db.find_api_key(&token).await {
             Ok(Some(api_key)) => {
+                info!("API key authenticated for user: {}", api_key.user_id);
                 let _ = db.update_api_key_last_used(api_key.id).await;
                 AuthContext::ApiKey {
                     user_id: api_key.user_id,
                     api_key_id: api_key.id,
                 }
             }
-            _ => AuthContext::None,
+            Ok(None) => {
+                warn!(
+                    "API key not found or invalid: {}...",
+                    &token[..token.len().min(20)]
+                );
+                AuthContext::None
+            }
+            Err(e) => {
+                error!("Database error looking up API key: {}", e);
+                AuthContext::None
+            }
         }
     } else {
+        debug!("Token identified as JWT");
         let jwt_config = JwtConfig::from_env();
-        if let Ok(claims) = jwt_config.verify_token(token) {
-            AuthContext::User(claims)
-        } else {
-            AuthContext::None
+        match jwt_config.verify_token(&token) {
+            Ok(claims) => {
+                info!("JWT authenticated for user: {}", claims.sub);
+                AuthContext::User(claims)
+            }
+            Err(e) => {
+                warn!("JWT verification failed: {}", e);
+                AuthContext::None
+            }
         }
     };
 
