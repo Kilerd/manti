@@ -70,10 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     checkAuth();
-
-    const interval = setInterval(checkAuth, 60000);
-
-    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
