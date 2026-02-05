@@ -1,7 +1,9 @@
 use super::*;
-use async_trait::async_trait;
-use crate::models::chat::{ChatCompletionRequest, ChatCompletionResponse, ChatMessage, MessageContent};
+use crate::models::chat::{
+    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, MessageContent,
+};
 use crate::models::streaming::ChatCompletionChunk;
+use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use reqwest::Client;
 use serde_json::json;
@@ -77,31 +79,34 @@ impl OpenAIProvider {
     }
 
     fn convert_messages(&self, messages: Vec<ChatMessage>) -> Vec<serde_json::Value> {
-        messages.into_iter().map(|msg| {
-            let content = match msg.content {
-                MessageContent::Text(text) => json!(text),
-                MessageContent::Parts(parts) => json!(parts),
-            };
+        messages
+            .into_iter()
+            .map(|msg| {
+                let content = match msg.content {
+                    MessageContent::Text(text) => json!(text),
+                    MessageContent::Parts(parts) => json!(parts),
+                };
 
-            let mut message = json!({
-                "role": msg.role,
-                "content": content,
-            });
+                let mut message = json!({
+                    "role": msg.role,
+                    "content": content,
+                });
 
-            if let Some(name) = msg.name {
-                message["name"] = json!(name);
-            }
+                if let Some(name) = msg.name {
+                    message["name"] = json!(name);
+                }
 
-            if let Some(tool_calls) = msg.tool_calls {
-                message["tool_calls"] = json!(tool_calls);
-            }
+                if let Some(tool_calls) = msg.tool_calls {
+                    message["tool_calls"] = json!(tool_calls);
+                }
 
-            if let Some(tool_call_id) = msg.tool_call_id {
-                message["tool_call_id"] = json!(tool_call_id);
-            }
+                if let Some(tool_call_id) = msg.tool_call_id {
+                    message["tool_call_id"] = json!(tool_call_id);
+                }
 
-            message
-        }).collect()
+                message
+            })
+            .collect()
     }
 }
 
@@ -173,9 +178,13 @@ impl Provider for OpenAIProvider {
             body["response_format"] = json!(response_format);
         }
 
-        let mut req = self.client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
+        let mut req = self
+            .client
+            .post(dbg!(&url))
+            .header(
+                "Authorization",
+                dbg!(format!("Bearer {}", self.config.api_key)),
+            )
             .header("Content-Type", "application/json");
 
         if let Some(org) = &self.config.organization {
@@ -189,8 +198,14 @@ impl Provider for OpenAIProvider {
             .map_err(|e| crate::MantiError::Provider(e.to_string()))?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(crate::MantiError::Provider(format!("OpenAI API error: {}", error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(crate::MantiError::Provider(format!(
+                "OpenAI API error: {}",
+                error_text
+            )));
         }
 
         let result: ChatCompletionResponse = response
@@ -256,9 +271,13 @@ impl Provider for OpenAIProvider {
             body["response_format"] = json!(response_format);
         }
 
-        let mut req = self.client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
+        let mut req = self
+            .client
+            .post(dbg!(&url))
+            .header(
+                "Authorization",
+                dbg!(format!("Bearer {}", self.config.api_key)),
+            )
             .header("Content-Type", "application/json");
 
         if let Some(org) = &self.config.organization {
@@ -272,42 +291,45 @@ impl Provider for OpenAIProvider {
             .map_err(|e| crate::MantiError::Provider(e.to_string()))?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(crate::MantiError::Provider(format!("OpenAI API error: {}", error_text)));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(crate::MantiError::Provider(format!(
+                "OpenAI API error: {}",
+                error_text
+            )));
         }
 
         // Parse SSE stream
         let stream = response
             .bytes_stream()
-            .map(move |chunk| {
-                match chunk {
-                    Ok(bytes) => {
-                        let text = String::from_utf8_lossy(&bytes);
-                        let lines: Vec<&str> = text.lines().collect();
+            .map(move |chunk| match chunk {
+                Ok(bytes) => {
+                    let text = String::from_utf8_lossy(&bytes);
+                    let lines: Vec<&str> = text.lines().collect();
 
-                        let mut chunks = Vec::new();
-                        for line in lines {
-                            if line.starts_with("data: ") {
-                                let data = &line[6..];
-                                if data.trim() == "[DONE]" {
-                                    continue;
-                                }
-                                match serde_json::from_str::<ChatCompletionChunk>(data) {
-                                    Ok(chunk) => chunks.push(Ok(chunk)),
-                                    Err(e) => {
-                                        if !data.trim().is_empty() {
-                                            chunks.push(Err(crate::MantiError::Provider(e.to_string())));
-                                        }
+                    let mut chunks = Vec::new();
+                    for line in lines {
+                        if line.starts_with("data: ") {
+                            let data = &line[6..];
+                            if data.trim() == "[DONE]" {
+                                continue;
+                            }
+                            match serde_json::from_str::<ChatCompletionChunk>(data) {
+                                Ok(chunk) => chunks.push(Ok(chunk)),
+                                Err(e) => {
+                                    if !data.trim().is_empty() {
+                                        chunks
+                                            .push(Err(crate::MantiError::Provider(e.to_string())));
                                     }
                                 }
                             }
                         }
-                        stream::iter(chunks)
                     }
-                    Err(e) => {
-                        stream::iter(vec![Err(crate::MantiError::Provider(e.to_string()))])
-                    }
+                    stream::iter(chunks)
                 }
+                Err(e) => stream::iter(vec![Err(crate::MantiError::Provider(e.to_string()))]),
             })
             .flatten();
 
@@ -315,7 +337,8 @@ impl Provider for OpenAIProvider {
     }
 
     fn calculate_cost(&self, model: &str, input_tokens: i64, output_tokens: i64) -> f64 {
-        let model_config = self.models
+        let model_config = self
+            .models
             .iter()
             .find(|m| m.id == model)
             .unwrap_or(&self.models[0]);

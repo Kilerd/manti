@@ -30,7 +30,6 @@ use crate::config::Settings;
 use crate::db::DatabaseService;
 use crate::models::{
     chat::ChatCompletionRequest,
-    provider_config::ProviderConfig as DbProviderConfig,
     response::{ChatCompletionResponse, ModelListResponse},
     streaming::ChatCompletionChunk,
 };
@@ -60,7 +59,7 @@ impl Deref for Db {
 pub static MODEL_REGISTRY: Lazy<Arc<ModelRegistry>> = Lazy::new(|| Arc::new(ModelRegistry::new()));
 
 /// Reload all providers and models from database
-pub async fn reload_providers(db: &DatabaseService, jwt_secret: &str) -> Result<usize> {
+pub async fn reload_providers(db: &DatabaseService) -> Result<usize> {
     // Clear existing providers and models
     MODEL_REGISTRY.clear();
 
@@ -72,19 +71,6 @@ pub async fn reload_providers(db: &DatabaseService, jwt_secret: &str) -> Result<
         if !db_config.is_active {
             continue;
         }
-
-        // Decrypt API key
-        let api_key =
-            match DbProviderConfig::decrypt_api_key(&db_config.api_key_encrypted, jwt_secret) {
-                Ok(key) => key,
-                Err(e) => {
-                    error!(
-                        "Failed to decrypt API key for provider '{}': {}",
-                        db_config.name, e
-                    );
-                    continue;
-                }
-            };
 
         // Convert provider_type string to ProviderType enum
         let provider_type = match db_config.provider_type.as_str() {
@@ -98,7 +84,7 @@ pub async fn reload_providers(db: &DatabaseService, jwt_secret: &str) -> Result<
             db_config.name.clone(),
             ProviderConfig {
                 provider_type,
-                api_key,
+                api_key: db_config.api_key.clone(),
                 base_url: db_config.base_url.clone(),
                 organization: None,
                 extra_params: Default::default(),
@@ -392,7 +378,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     db_service.migrate().await?;
 
     info!("Loading providers from database...");
-    let loaded = reload_providers(&db_service, &settings.application.auth.jwt_secret).await?;
+    let loaded = reload_providers(&db_service).await?;
     info!("Loaded {} provider(s)", loaded);
 
     let available_models = MODEL_REGISTRY.list_model_names();
@@ -409,6 +395,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .config(settings)
         // LLM routes
         .post("/v1/chat/completions", chat_completions)
+        .post("")
         .get("/v1/models", list_models)
         // Public auth routes
         .get("/health", handlers::health_check)

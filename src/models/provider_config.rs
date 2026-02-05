@@ -16,7 +16,7 @@ pub struct ProviderConfig {
     pub id: Uuid,
     pub provider_type: String,
     pub name: String,
-    pub api_key_encrypted: String,
+    pub api_key: String,
     pub base_url: Option<String>,
     pub priority: i32,
     pub is_active: bool,
@@ -33,7 +33,7 @@ pub struct ProviderConfig {
 pub struct CreateProviderConfig {
     pub provider_type: String,
     pub name: String,
-    pub api_key_encrypted: String,
+    pub api_key: String,
     pub base_url: Option<String>,
     pub priority: i32,
     pub is_active: bool,
@@ -47,7 +47,7 @@ pub struct CreateProviderConfig {
 pub struct CreateProviderConfigRequest {
     pub provider_type: String,  // "openai", "anthropic", "google", etc.
     pub name: String,
-    pub api_key: String, // Plain text, will be encrypted
+    pub api_key: String,
     pub base_url: Option<String>,
     pub priority: Option<i32>,
     pub rate_limit: Option<i32>,
@@ -58,7 +58,7 @@ pub struct CreateProviderConfigRequest {
 #[derive(Debug, Deserialize, Schematic)]
 pub struct UpdateProviderConfigRequest {
     pub name: Option<String>,
-    pub api_key: Option<String>, // If provided, will re-encrypt
+    pub api_key: Option<String>,
     pub base_url: Option<String>,
     pub priority: Option<i32>,
     pub is_active: Option<bool>,
@@ -111,14 +111,14 @@ impl ProviderConfig {
     pub fn new(
         provider_type: String,
         name: String,
-        api_key_encrypted: String,
+        api_key: String,
     ) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
             provider_type,
             name,
-            api_key_encrypted,
+            api_key,
             base_url: None,
             priority: 0,
             is_active: true,
@@ -129,71 +129,6 @@ impl ProviderConfig {
             created_at: now,
             updated_at: now,
         }
-    }
-
-    /// Encrypt API key using AES-256-GCM
-    /// Format: base64(nonce || ciphertext || tag)
-    pub fn encrypt_api_key(api_key: &str, secret: &str) -> String {
-        use aes_gcm::{
-            aead::{Aead, KeyInit, OsRng},
-            Aes256Gcm, Nonce,
-        };
-        use base64::{Engine as _, engine::general_purpose};
-        use sha2::{Digest, Sha256};
-
-        // Derive a 256-bit key from the secret using SHA-256
-        let key_bytes = Sha256::digest(secret.as_bytes());
-        let cipher = Aes256Gcm::new(&key_bytes.into());
-
-        // Generate a random 96-bit nonce
-        let mut nonce_bytes = [0u8; 12];
-        use rand::RngCore;
-        OsRng.fill_bytes(&mut nonce_bytes);
-        let nonce = Nonce::from_slice(&nonce_bytes);
-
-        // Encrypt the API key
-        let ciphertext = cipher
-            .encrypt(nonce, api_key.as_bytes())
-            .expect("encryption failed");
-
-        // Combine nonce + ciphertext and encode to base64
-        let mut combined = nonce_bytes.to_vec();
-        combined.extend_from_slice(&ciphertext);
-        general_purpose::STANDARD.encode(&combined)
-    }
-
-    /// Decrypt API key using AES-256-GCM
-    pub fn decrypt_api_key(encrypted: &str, secret: &str) -> Result<String, String> {
-        use aes_gcm::{
-            aead::{Aead, KeyInit},
-            Aes256Gcm, Nonce,
-        };
-        use base64::{Engine as _, engine::general_purpose};
-        use sha2::{Digest, Sha256};
-
-        // Derive the same 256-bit key from the secret
-        let key_bytes = Sha256::digest(secret.as_bytes());
-        let cipher = Aes256Gcm::new(&key_bytes.into());
-
-        // Decode from base64
-        let combined = general_purpose::STANDARD
-            .decode(encrypted)
-            .map_err(|e| format!("Base64 decode error: {}", e))?;
-
-        // Split nonce (12 bytes) and ciphertext
-        if combined.len() < 12 {
-            return Err("Invalid encrypted data: too short".to_string());
-        }
-
-        let (nonce_bytes, ciphertext) = combined.split_at(12);
-        let nonce = Nonce::from_slice(nonce_bytes);
-
-        // Decrypt
-        let plaintext = cipher
-            .decrypt(nonce, ciphertext)
-            .map_err(|e| format!("Decryption failed: {}", e))?;
-
-        String::from_utf8(plaintext).map_err(|e| format!("UTF-8 decode error: {}", e))
     }
 }
 

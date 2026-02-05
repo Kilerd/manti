@@ -236,7 +236,7 @@ impl DatabaseService {
                 id: row.get("id"),
                 provider_type: row.get("provider_type"),
                 name: row.get("name"),
-                api_key_encrypted: row.get("api_key_encrypted"),
+                api_key: row.get("api_key"),
                 base_url: row.get("base_url"),
                 priority: row.get("priority"),
                 is_active: row.get("is_active"),
@@ -276,7 +276,7 @@ impl DatabaseService {
         &self,
         id: Uuid,
         name: Option<String>,
-        api_key_encrypted: Option<String>,
+        api_key: Option<String>,
         base_url: Option<Option<String>>,
         priority: Option<i32>,
         is_active: Option<bool>,
@@ -293,8 +293,8 @@ impl DatabaseService {
         if let Some(n) = name {
             config.name = n;
         }
-        if let Some(key) = api_key_encrypted {
-            config.api_key_encrypted = key;
+        if let Some(key) = api_key {
+            config.api_key = key;
         }
         if let Some(url) = base_url {
             config.base_url = url;

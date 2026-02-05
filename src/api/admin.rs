@@ -59,15 +59,10 @@ pub async fn create_provider(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // Encrypt the API key
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
-    let encrypted_key = ProviderConfig::encrypt_api_key(&req.api_key, &jwt_secret);
-    tracing::debug!("API key encrypted, creating provider config");
-
     let create_config = CreateProviderConfig {
         provider_type: req.provider_type.clone(),
         name: req.name.clone(),
-        api_key_encrypted: encrypted_key,
+        api_key: req.api_key.clone(),
         base_url: req.base_url.clone(),
         priority: req.priority.unwrap_or(0),
         is_active: true,
@@ -87,7 +82,7 @@ pub async fn create_provider(
         })?;
 
     // Reload providers after create
-    let _ = reload_providers(&db, &jwt_secret).await;
+    let _ = reload_providers(&db).await;
 
     Ok(Json(created.into()))
 }
@@ -108,20 +103,13 @@ pub async fn update_provider(
         .map_err(|e| e.to_status_code())?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Encrypt new API key if provided
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
-    let encrypted_key = req
-        .api_key
-        .as_ref()
-        .map(|api_key| ProviderConfig::encrypt_api_key(api_key, &jwt_secret));
-
     let monthly_quota_decimal = req.monthly_quota.map(Some);
 
     let updated = db
         .update_provider_config(
             id,
             req.name,
-            encrypted_key,
+            req.api_key,
             req.base_url.map(Some),
             req.priority,
             req.is_active,
@@ -133,7 +121,7 @@ pub async fn update_provider(
         .map_err(|e| e.to_status_code())?;
 
     // Reload providers after update
-    let _ = reload_providers(&db, &jwt_secret).await;
+    let _ = reload_providers(&db).await;
 
     Ok(Json(updated.into()))
 }
@@ -158,8 +146,7 @@ pub async fn delete_provider(
         .map_err(|e| e.to_status_code())?;
 
     // Reload providers after delete
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
-    let _ = reload_providers(&db, &jwt_secret).await;
+    let _ = reload_providers(&db).await;
 
     Ok(Json(()))
 }
@@ -223,8 +210,7 @@ pub async fn create_model(
         .map_err(|e| e.to_status_code())?;
 
     // Reload providers after model change
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
-    let _ = reload_providers(&db, &jwt_secret).await;
+    let _ = reload_providers(&db).await;
 
     Ok(Json(created.into()))
 }
@@ -263,8 +249,7 @@ pub async fn update_model(
         .map_err(|e| e.to_status_code())?;
 
     // Reload providers after model change
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
-    let _ = reload_providers(&db, &jwt_secret).await;
+    let _ = reload_providers(&db).await;
 
     Ok(Json(updated.into()))
 }
@@ -289,8 +274,7 @@ pub async fn delete_model(
         .map_err(|e| e.to_status_code())?;
 
     // Reload providers after model change
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "default-secret".to_string());
-    let _ = reload_providers(&db, &jwt_secret).await;
+    let _ = reload_providers(&db).await;
 
     Ok(Json(()))
 }
