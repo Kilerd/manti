@@ -4,7 +4,7 @@ use crate::models::chat::{
 };
 use crate::models::streaming::ChatCompletionChunk;
 use async_trait::async_trait;
-use futures::stream::{self, BoxStream, StreamExt};
+use futures::stream::{BoxStream, StreamExt};
 use reqwest::Client;
 use serde_json::json;
 
@@ -180,10 +180,10 @@ impl Provider for OpenAIProvider {
 
         let mut req = self
             .client
-            .post(dbg!(&url))
+            .post(&url)
             .header(
                 "Authorization",
-                dbg!(format!("Bearer {}", self.config.api_key)),
+                format!("Bearer {}", self.config.api_key),
             )
             .header("Content-Type", "application/json");
 
@@ -273,10 +273,10 @@ impl Provider for OpenAIProvider {
 
         let mut req = self
             .client
-            .post(dbg!(&url))
+            .post(&url)
             .header(
                 "Authorization",
-                dbg!(format!("Bearer {}", self.config.api_key)),
+                format!("Bearer {}", self.config.api_key),
             )
             .header("Content-Type", "application/json");
 
@@ -301,37 +301,64 @@ impl Provider for OpenAIProvider {
             )));
         }
 
-        // Parse SSE stream
-        let stream = response
-            .bytes_stream()
-            .map(move |chunk| match chunk {
-                Ok(bytes) => {
-                    let text = String::from_utf8_lossy(&bytes);
-                    let lines: Vec<&str> = text.lines().collect();
+        // Parse SSE stream with buffering to handle chunks split across boundaries
+        let byte_stream = response.bytes_stream();
+        let stream = async_stream::stream! {
+            let mut buffer = String::new();
+            futures::pin_mut!(byte_stream);
 
-                    let mut chunks = Vec::new();
-                    for line in lines {
-                        if line.starts_with("data: ") {
-                            let data = &line[6..];
-                            if data.trim() == "[DONE]" {
+            while let Some(chunk_result) = byte_stream.next().await {
+                match chunk_result {
+                    Ok(bytes) => {
+                        buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+                        // Process complete lines from buffer
+                        while let Some(newline_pos) = buffer.find('\n') {
+                            let line = buffer[..newline_pos].trim().to_string();
+                            buffer = buffer[newline_pos + 1..].to_string();
+
+                            if line.is_empty() {
                                 continue;
                             }
-                            match serde_json::from_str::<ChatCompletionChunk>(data) {
-                                Ok(chunk) => chunks.push(Ok(chunk)),
-                                Err(e) => {
-                                    if !data.trim().is_empty() {
-                                        chunks
-                                            .push(Err(crate::MantiError::Provider(e.to_string())));
+
+                            if line.starts_with("data: ") {
+                                let data = &line[6..];
+                                if data.trim() == "[DONE]" {
+                                    continue;
+                                }
+                                match serde_json::from_str::<ChatCompletionChunk>(data) {
+                                    Ok(chunk) => yield Ok(chunk),
+                                    Err(e) => {
+                                        if !data.trim().is_empty() {
+                                            yield Err(crate::MantiError::Provider(e.to_string()));
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    stream::iter(chunks)
+                    Err(e) => {
+                        yield Err(crate::MantiError::Provider(e.to_string()));
+                        break;
+                    }
                 }
-                Err(e) => stream::iter(vec![Err(crate::MantiError::Provider(e.to_string()))]),
-            })
-            .flatten();
+            }
+
+            // Process any remaining data in buffer
+            if !buffer.trim().is_empty() {
+                for line in buffer.lines() {
+                    let line = line.trim();
+                    if line.starts_with("data: ") {
+                        let data = &line[6..];
+                        if data.trim() != "[DONE]" && !data.trim().is_empty() {
+                            if let Ok(chunk) = serde_json::from_str::<ChatCompletionChunk>(data) {
+                                yield Ok(chunk);
+                            }
+                        }
+                    }
+                }
+            }
+        };
 
         Ok(Box::pin(stream))
     }
