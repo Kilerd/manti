@@ -1,5 +1,5 @@
-import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
+import { Link, Outlet, useLocation } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   Key,
@@ -7,27 +7,33 @@ import {
   User,
   LogOut,
   Menu,
-  X
-} from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useState } from 'react';
-import { cn } from '@/lib/utils';
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+
+interface NavItem {
+  name: string;
+  icon: LucideIcon;
+  href: string;
+}
 
 export default function Layout() {
   const location = useLocation();
   const { logout, user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const navigation = [
-    { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-    { name: 'API Keys', icon: Key, href: '/api-keys' },
-    { name: 'Usage', icon: BarChart3, href: '/usage' },
-    { name: 'Profile', icon: User, href: '/profile' },
+  const navigation: NavItem[] = [
+    { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+    { name: "API Keys", icon: Key, href: "/api-keys" },
+    { name: "Usage", icon: BarChart3, href: "/usage" },
+    { name: "Profile", icon: User, href: "/profile" },
   ];
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
@@ -35,11 +41,10 @@ export default function Layout() {
         />
       )}
 
-      {/* Sidebar */}
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 bg-card shadow-md transform transition-transform lg:translate-x-0 lg:static lg:inset-0',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          "fixed inset-y-0 left-0 z-50 w-64 bg-card shadow-md transform transition-transform lg:translate-x-0 lg:static lg:inset-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="flex flex-col h-full">
@@ -63,10 +68,10 @@ export default function Layout() {
                   key={item.name}
                   to={item.href}
                   className={cn(
-                    'flex items-center space-x-3 px-3 py-2 rounded-md transition-colors',
+                    "flex items-center space-x-3 px-3 py-2 rounded-md transition-colors",
                     isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
                   )}
                   onClick={() => setSidebarOpen(false)}
                 >
@@ -96,7 +101,6 @@ export default function Layout() {
         </div>
       </div>
 
-      {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-card shadow-sm border-b lg:hidden">
           <div className="flex items-center justify-between p-4">

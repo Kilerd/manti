@@ -1,19 +1,33 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { usageAPI } from '@/services/api';
-import { toast } from '@/hooks/use-toast';
-import { BarChart3, DollarSign, Activity, Key, RefreshCw, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { client, type UsageStats } from "@/api";
+import { toast } from "@/hooks/use-toast";
+import {
+  BarChart3,
+  DollarSign,
+  Activity,
+  Key,
+  RefreshCw,
+  AlertCircle,
+  type LucideIcon,
+} from "lucide-react";
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<UsageStats>({
     totalRequests: 0,
     totalTokens: 0,
     totalCost: 0,
     activeKeys: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -29,8 +43,16 @@ export default function Dashboard() {
     setError(null);
 
     try {
-      const response = await usageAPI.getStats();
-      setStats(response.data);
+      const { data, error: apiError } = await client.GET("/usage/stats");
+
+      if (apiError || !data) {
+        throw new Error(
+          (apiError as { message?: string })?.message ||
+            "Failed to fetch statistics"
+        );
+      }
+
+      setStats(data);
 
       if (isRefresh) {
         toast({
@@ -38,8 +60,11 @@ export default function Dashboard() {
           description: "Dashboard statistics have been updated.",
         });
       }
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Failed to fetch statistics. Please try again.';
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : "Failed to fetch statistics. Please try again.";
       setError(errorMessage);
 
       toast({
@@ -57,30 +82,35 @@ export default function Dashboard() {
     fetchStats(true);
   };
 
-  const statCards = [
+  const statCards: {
+    title: string;
+    value: string | number;
+    icon: LucideIcon;
+    description: string;
+  }[] = [
     {
-      title: 'Total Requests',
+      title: "Total Requests",
       value: stats.totalRequests.toLocaleString(),
       icon: BarChart3,
-      description: 'API calls this month',
+      description: "API calls this month",
     },
     {
-      title: 'Tokens Used',
+      title: "Tokens Used",
       value: stats.totalTokens.toLocaleString(),
       icon: Activity,
-      description: 'Total tokens consumed',
+      description: "Total tokens consumed",
     },
     {
-      title: 'Total Cost',
+      title: "Total Cost",
       value: `$${stats.totalCost.toFixed(2)}`,
       icon: DollarSign,
-      description: 'Usage cost this month',
+      description: "Usage cost this month",
     },
     {
-      title: 'Active API Keys',
+      title: "Active API Keys",
       value: stats.activeKeys,
       icon: Key,
-      description: 'Currently active keys',
+      description: "Currently active keys",
     },
   ];
 
@@ -113,7 +143,9 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Monitor your LLM API usage and costs</p>
+          <p className="text-muted-foreground">
+            Monitor your LLM API usage and costs
+          </p>
         </div>
         <Button
           onClick={handleRefresh}
@@ -121,7 +153,9 @@ export default function Dashboard() {
           variant="outline"
           size="sm"
         >
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          <RefreshCw
+            className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
+          />
           Refresh
         </Button>
       </div>

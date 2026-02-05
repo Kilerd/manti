@@ -1,8 +1,14 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState, useEffect, type KeyboardEvent } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -10,7 +16,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,35 +26,38 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { apiKeyAPI } from '@/services/api';
-import { toast } from '@/hooks/use-toast';
-import { Copy, Trash2, Plus, Eye, EyeOff, AlertCircle } from 'lucide-react';
+} from "@/components/ui/alert-dialog";
+import { client, type ApiKey } from "@/api";
+import { toast } from "@/hooks/use-toast";
+import { Copy, Trash2, Plus, Eye, EyeOff, AlertCircle } from "lucide-react";
 
 export default function ApiKeys() {
-  const [apiKeys, setApiKeys] = useState([]);
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [newKeyName, setNewKeyName] = useState('');
-  const [showKey, setShowKey] = useState({});
-  const [newKey, setNewKey] = useState(null);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [showKey, setShowKey] = useState<Record<string, boolean>>({});
+  const [newKey, setNewKey] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [keyToDelete, setKeyToDelete] = useState(null);
+  const [keyToDelete, setKeyToDelete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchApiKeys();
   }, []);
 
-  // Auto-dismiss new key after 30 seconds
   useEffect(() => {
     if (newKey) {
       const timer = setTimeout(() => {
         setNewKey(null);
         toast({
           title: "Key Dismissed",
-          description: "The API key display has been automatically closed for security.",
+          description:
+            "The API key display has been automatically closed for security.",
         });
-      }, 30000); // 30 seconds
+      }, 30000);
 
       return () => clearTimeout(timer);
     }
@@ -56,9 +65,14 @@ export default function ApiKeys() {
 
   const fetchApiKeys = async () => {
     try {
-      const response = await apiKeyAPI.list();
-      setApiKeys(response.data);
-    } catch (error) {
+      const { data, error } = await client.GET("/api-keys");
+
+      if (error || !data) {
+        throw new Error("Failed to fetch API keys");
+      }
+
+      setApiKeys(data);
+    } catch {
       toast({
         title: "Error",
         description: "Failed to fetch API keys. Please try again.",
@@ -74,19 +88,32 @@ export default function ApiKeys() {
 
     setCreating(true);
     try {
-      const response = await apiKeyAPI.create({ name: newKeyName });
-      setNewKey(response.data.key);
-      setApiKeys([...apiKeys, response.data]);
-      setNewKeyName('');
+      const { data, error } = await client.POST("/api-keys", {
+        body: { name: newKeyName },
+      });
+
+      if (error || !data) {
+        throw new Error(
+          (error as { message?: string })?.message ||
+            "Failed to create API key"
+        );
+      }
+
+      setNewKey(data.key);
+      setApiKeys([...apiKeys, data]);
+      setNewKeyName("");
 
       toast({
         title: "API Key Created",
-        description: `Successfully created API key "${response.data.name}"`,
+        description: `Successfully created API key "${data.name}"`,
       });
-    } catch (error) {
+    } catch (err) {
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to create API key. Please try again.",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Failed to create API key. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -94,7 +121,7 @@ export default function ApiKeys() {
     }
   };
 
-  const confirmDeleteKey = (keyId, keyName) => {
+  const confirmDeleteKey = (keyId: string, keyName: string) => {
     setKeyToDelete({ id: keyId, name: keyName });
     setDeleteDialogOpen(true);
   };
@@ -103,17 +130,30 @@ export default function ApiKeys() {
     if (!keyToDelete) return;
 
     try {
-      await apiKeyAPI.revoke(keyToDelete.id);
+      const { error } = await client.DELETE("/api-keys/{id}", {
+        params: { path: { id: keyToDelete.id } },
+      });
+
+      if (error) {
+        throw new Error(
+          (error as { message?: string })?.message ||
+            "Failed to delete API key"
+        );
+      }
+
       setApiKeys(apiKeys.filter((key) => key.id !== keyToDelete.id));
 
       toast({
         title: "API Key Deleted",
         description: `Successfully deleted API key "${keyToDelete.name}"`,
       });
-    } catch (error) {
+    } catch (err) {
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to delete API key. Please try again.",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Failed to delete API key. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -122,27 +162,36 @@ export default function ApiKeys() {
     }
   };
 
-  const copyToClipboard = (text, keyName) => {
-    navigator.clipboard.writeText(text).then(() => {
-      toast({
-        title: "Copied",
-        description: `API key "${keyName}" copied to clipboard`,
+  const copyToClipboard = (text: string, keyName: string) => {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        toast({
+          title: "Copied",
+          description: `API key "${keyName}" copied to clipboard`,
+        });
+      })
+      .catch(() => {
+        toast({
+          title: "Error",
+          description: "Failed to copy to clipboard",
+          variant: "destructive",
+        });
       });
-    }).catch(() => {
-      toast({
-        title: "Error",
-        description: "Failed to copy to clipboard",
-        variant: "destructive",
-      });
-    });
   };
 
-  const toggleKeyVisibility = (keyId) => {
+  const toggleKeyVisibility = (keyId: string) => {
     setShowKey({ ...showKey, [keyId]: !showKey[keyId] });
   };
 
-  const maskKey = (key) => {
-    return key.substring(0, 8) + '...' + key.substring(key.length - 4);
+  const maskKey = (key: string) => {
+    return key.substring(0, 8) + "..." + key.substring(key.length - 4);
+  };
+
+  const handleKeyPress = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleCreateKey();
+    }
   };
 
   if (loading) {
@@ -157,7 +206,9 @@ export default function ApiKeys() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">API Keys</h1>
-        <p className="text-muted-foreground">Manage your API keys for accessing the LLM Gateway</p>
+        <p className="text-muted-foreground">
+          Manage your API keys for accessing the LLM Gateway
+        </p>
       </div>
 
       {newKey && (
@@ -170,13 +221,18 @@ export default function ApiKeys() {
             <CardDescription>
               Save this key now. You won't be able to see it again!
               <br />
-              <span className="text-xs">This display will auto-close in 30 seconds for security.</span>
+              <span className="text-xs">
+                This display will auto-close in 30 seconds for security.
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center space-x-2">
               <Input value={newKey} readOnly className="font-mono" />
-              <Button size="icon" onClick={() => copyToClipboard(newKey, "new key")}>
+              <Button
+                size="icon"
+                onClick={() => copyToClipboard(newKey, "new key")}
+              >
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
@@ -190,7 +246,9 @@ export default function ApiKeys() {
       <Card>
         <CardHeader>
           <CardTitle>Create New API Key</CardTitle>
-          <CardDescription>Generate a new API key for your applications</CardDescription>
+          <CardDescription>
+            Generate a new API key for your applications
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex space-x-2">
@@ -203,10 +261,13 @@ export default function ApiKeys() {
                 placeholder="Enter a name for this key"
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleCreateKey()}
+                onKeyPress={handleKeyPress}
               />
             </div>
-            <Button onClick={handleCreateKey} disabled={creating || !newKeyName.trim()}>
+            <Button
+              onClick={handleCreateKey}
+              disabled={creating || !newKeyName.trim()}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Create Key
             </Button>
@@ -242,7 +303,9 @@ export default function ApiKeys() {
                     <TableCell className="font-mono text-sm">
                       <div className="flex items-center space-x-2">
                         <span>
-                          {showKey[apiKey.id] ? apiKey.key : maskKey(apiKey.key)}
+                          {showKey[apiKey.id]
+                            ? apiKey.key
+                            : maskKey(apiKey.key)}
                         </span>
                         <Button
                           size="icon"
@@ -258,25 +321,31 @@ export default function ApiKeys() {
                         </Button>
                       </div>
                     </TableCell>
-                    <TableCell>{new Date(apiKey.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {new Date(apiKey.createdAt).toLocaleDateString()}
+                    </TableCell>
                     <TableCell>
                       {apiKey.lastUsedAt
                         ? new Date(apiKey.lastUsedAt).toLocaleDateString()
-                        : 'Never'}
+                        : "Never"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end space-x-2">
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => copyToClipboard(apiKey.key, apiKey.name)}
+                          onClick={() =>
+                            copyToClipboard(apiKey.key, apiKey.name)
+                          }
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => confirmDeleteKey(apiKey.id, apiKey.name)}
+                          onClick={() =>
+                            confirmDeleteKey(apiKey.id, apiKey.name)
+                          }
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -296,12 +365,16 @@ export default function ApiKeys() {
             <AlertDialogTitle>Delete API Key</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete the API key "{keyToDelete?.name}"?
-              This action cannot be undone and any applications using this key will stop working.
+              This action cannot be undone and any applications using this key
+              will stop working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteKey} className="bg-destructive text-destructive-foreground">
+            <AlertDialogAction
+              onClick={handleDeleteKey}
+              className="bg-destructive text-destructive-foreground"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

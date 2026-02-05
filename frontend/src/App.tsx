@@ -1,18 +1,23 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { Toaster } from '@/components/ui/toaster';
-import Layout from '@/components/Layout';
-import Login from '@/pages/Login';
-import Register from '@/pages/Register';
-import Dashboard from '@/pages/Dashboard';
-import ApiKeys from '@/pages/ApiKeys';
-import Usage from '@/pages/Usage';
-import Profile from '@/pages/Profile';
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from '@/hooks/use-toast';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { Toaster } from "@/components/ui/toaster";
+import Layout from "@/components/Layout";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import Dashboard from "@/pages/Dashboard";
+import ApiKeys from "@/pages/ApiKeys";
+import Usage from "@/pages/Usage";
+import Profile from "@/pages/Profile";
+import { useEffect, type ReactNode } from "react";
+import { toast } from "@/hooks/use-toast";
 
-function PrivateRoute({ children }) {
+function PrivateRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
@@ -31,16 +36,16 @@ function AuthListener() {
   const { logout } = useAuth();
 
   useEffect(() => {
-    const handleAuthLogout = (event) => {
+    const handleAuthLogout = (event: CustomEvent<{ reason?: string }>) => {
       const reason = event.detail?.reason;
 
-      if (reason === 'session_expired') {
+      if (reason === "session_expired") {
         toast({
           title: "Session Expired",
           description: "Please login again to continue.",
           variant: "destructive",
         });
-      } else if (reason === 'refresh_failed') {
+      } else if (reason === "refresh_failed") {
         toast({
           title: "Authentication Failed",
           description: "Please login again.",
@@ -48,15 +53,20 @@ function AuthListener() {
         });
       }
 
-      // Clear auth state
       logout();
-      navigate('/login');
+      navigate("/login");
     };
 
-    window.addEventListener('auth:logout', handleAuthLogout);
+    window.addEventListener(
+      "auth:logout",
+      handleAuthLogout as EventListener
+    );
 
     return () => {
-      window.removeEventListener('auth:logout', handleAuthLogout);
+      window.removeEventListener(
+        "auth:logout",
+        handleAuthLogout as EventListener
+      );
     };
   }, [navigate, logout]);
 
