@@ -149,11 +149,9 @@ impl DatabaseService {
         Ok(())
     }
 
-    /// Revoke an API key
-    pub async fn revoke_api_key(&self, api_key_id: Uuid, user_id: Uuid) -> crate::Result<()> {
-        ApiKey::update()
-            .set(ApiKey::COLUMNS.is_active, false)
-            .set(ApiKey::COLUMNS.updated_at, Utc::now())
+    /// Delete an API key
+    pub async fn delete_api_key(&self, api_key_id: Uuid, user_id: Uuid) -> crate::Result<()> {
+        ApiKey::delete()
             .filter(
                 ApiKey::COLUMNS.id.eq(api_key_id)
                     & ApiKey::COLUMNS.user_id.eq(user_id)

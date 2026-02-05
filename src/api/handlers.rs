@@ -269,7 +269,7 @@ pub async fn revoke_api_key(
     Path(key_id): Path<Uuid>,
 ) -> Result<Json<()>, StatusCode> {
     let user_id = auth.require_auth()?;
-    db.revoke_api_key(key_id, user_id)
+    db.delete_api_key(key_id, user_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
