@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use conservator::{Domain, Creatable, Selectable};
 use gotcha::Schematic;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -19,6 +20,11 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
     pub last_login: Option<DateTime<Utc>>,
     pub user_groups: Vec<String>,
+    // Quota fields
+    pub rate_limit_rpm: Option<i32>,
+    pub monthly_quota: Option<Decimal>,
+    pub current_month_usage: Decimal,
+    pub usage_reset_at: DateTime<Utc>,
 }
 
 /// DTO for creating new users
@@ -64,6 +70,10 @@ impl User {
             updated_at: Utc::now(),
             last_login: None,
             user_groups: vec!["default".to_string()],
+            rate_limit_rpm: None,
+            monthly_quota: None,
+            current_month_usage: Decimal::ZERO,
+            usage_reset_at: Utc::now(),
         })
     }
 

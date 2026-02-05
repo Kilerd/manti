@@ -1,5 +1,6 @@
 use crate::models::{
     api_key::{ApiKey, CreateApiKey},
+    billing::{Billing, CreateBilling},
     usage::{Usage, CreateUsage},
     user::{User, CreateUser},
     provider_config::{ProviderConfig, CreateProviderConfig, UsageStats, ModelUsageStats, ProviderUsageStats},
@@ -122,6 +123,21 @@ impl DatabaseService {
         }
 
         Ok(api_key)
+    }
+
+    /// Get an API key by its ID
+    pub async fn get_api_key_by_id(&self, id: Uuid) -> crate::Result<Option<ApiKey>> {
+        match ApiKey::fetch_one_by_pk(&id, &*self.pool).await {
+            Ok(api_key) => {
+                if api_key.is_valid() && api_key.is_active {
+                    Ok(Some(api_key))
+                } else {
+                    Ok(None)
+                }
+            }
+            Err(conservator::Error::TooManyRows(0)) => Ok(None),
+            Err(e) => Err(crate::MantiError::Database(e)),
+        }
     }
 
     /// List all API keys for a user
@@ -622,5 +638,120 @@ impl DatabaseService {
             by_model,
             by_provider,
         })
+    }
+
+    // Billing operations
+
+    /// Create a new billing record
+    pub async fn create_billing(&self, create_billing: CreateBilling) -> crate::Result<Billing> {
+        let billing_id = create_billing
+            .insert::<Billing>()
+            .returning_pk(&*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Billing::fetch_one_by_pk(&billing_id, &*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))
+    }
+
+    /// List all billings for a user
+    pub async fn list_user_billings(&self, user_id: Uuid) -> crate::Result<Vec<Billing>> {
+        Billing::select()
+            .filter(Billing::COLUMNS.user_id.eq(user_id))
+            .order_by(Billing::COLUMNS.period_start.desc())
+            .all(&*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))
+    }
+
+    /// Get a billing record by ID
+    pub async fn get_billing(&self, id: Uuid) -> crate::Result<Option<Billing>> {
+        match Billing::fetch_one_by_pk(&id, &*self.pool).await {
+            Ok(billing) => Ok(Some(billing)),
+            Err(conservator::Error::TooManyRows(0)) => Ok(None),
+            Err(e) => Err(crate::MantiError::Database(e)),
+        }
+    }
+
+    /// Update billing status
+    pub async fn update_billing_status(
+        &self,
+        id: Uuid,
+        status: &str,
+        paid_at: Option<DateTime<Utc>>,
+    ) -> crate::Result<Billing> {
+        let mut billing = Billing::fetch_one_by_pk(&id, &*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        billing.status = status.to_string();
+        if let Some(paid) = paid_at {
+            billing.paid_at = Some(paid);
+        }
+
+        billing.save(&*self.pool)
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Ok(billing)
+    }
+
+    /// Update user's monthly usage (add to current_month_usage)
+    pub async fn update_user_monthly_usage(&self, user_id: Uuid, cost: Decimal) -> crate::Result<()> {
+        let conn = self.pool.get().await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        // Atomically add to current_month_usage
+        let query = r#"
+            UPDATE users
+            SET current_month_usage = current_month_usage + $2,
+                updated_at = NOW()
+            WHERE id = $1
+        "#;
+
+        conn.execute(query, &[&user_id, &cost])
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Ok(())
+    }
+
+    /// Reset monthly usage for all users (call at month start)
+    pub async fn reset_monthly_usage(&self) -> crate::Result<u64> {
+        let conn = self.pool.get().await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        let query = r#"
+            UPDATE users
+            SET current_month_usage = 0,
+                usage_reset_at = NOW(),
+                updated_at = NOW()
+        "#;
+
+        let rows = conn.execute(query, &[])
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Ok(rows)
+    }
+
+    /// Check if billing already exists for a period
+    pub async fn billing_exists(&self, user_id: Uuid, period_start: DateTime<Utc>, period_end: DateTime<Utc>) -> crate::Result<bool> {
+        let conn = self.pool.get().await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        let query = r#"
+            SELECT EXISTS(
+                SELECT 1 FROM billings
+                WHERE user_id = $1 AND period_start = $2 AND period_end = $3
+            )
+        "#;
+
+        let row = conn.query_one(query, &[&user_id, &period_start, &period_end])
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Ok(row.get(0))
     }
 }

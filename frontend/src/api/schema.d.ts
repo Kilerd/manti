@@ -304,6 +304,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Billings
+         * @description List all billing records for the authenticated user
+         */
+        get: operations["list_billings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Billing
+         * @description Get a specific billing record
+         */
+        get: operations["get_billing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1124,6 +1164,92 @@ export interface operations {
                             user_groups: string[];
                             username: string;
                         };
+                    };
+                };
+            };
+        };
+    };
+    list_billings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description default return */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        created_at: string;
+                        /** Format: uuid */
+                        id: string;
+                        items?: {
+                            completion_tokens: number;
+                            cost: number;
+                            model: string;
+                            prompt_tokens: number;
+                            provider: string;
+                            requests: number;
+                        }[] | null;
+                        paid_at?: string | null;
+                        period_end: string;
+                        period_start: string;
+                        status: string;
+                        /** Format: decimal */
+                        total_cost: string;
+                        total_requests: number;
+                        total_tokens: number;
+                        /** Format: uuid */
+                        user_id: string;
+                    }[];
+                };
+            };
+        };
+    };
+    get_billing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description default return */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        created_at: string;
+                        /** Format: uuid */
+                        id: string;
+                        items?: {
+                            completion_tokens: number;
+                            cost: number;
+                            model: string;
+                            prompt_tokens: number;
+                            provider: string;
+                            requests: number;
+                        }[] | null;
+                        paid_at?: string | null;
+                        period_end: string;
+                        period_start: string;
+                        status: string;
+                        /** Format: decimal */
+                        total_cost: string;
+                        total_requests: number;
+                        total_tokens: number;
+                        /** Format: uuid */
+                        user_id: string;
                     };
                 };
             };

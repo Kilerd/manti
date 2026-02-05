@@ -82,6 +82,10 @@ export async function getUsageStats(): Promise<UsageStats> {
   return response.json();
 }
 
+// ============ Billing API ============
+export const listBillings = fetcher.path("/billing").method("get").create();
+export const getBilling = fetcher.path("/billing/{id}").method("get").create();
+
 // ============ Type exports ============
 export type User =
   operations["login"]["responses"]["200"]["content"]["application/json"]["user"];
@@ -104,6 +108,12 @@ export interface UsageStats {
 
 export type UsageRecord =
   operations["get_usage"]["responses"]["200"]["content"]["application/json"][number];
+
+// Billing types
+export type BillingRecord =
+  operations["list_billings"]["responses"]["200"]["content"]["application/json"][number];
+
+export type BillingItem = NonNullable<BillingRecord["items"]>[number];
 
 export type AvailableModel =
   operations["list_available_models"]["responses"]["200"]["content"]["application/json"][number];

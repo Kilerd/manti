@@ -8,6 +8,7 @@ pub mod provider_config;
 pub mod model;
 pub mod anthropic;
 pub mod conversion;
+pub mod billing;
 
 use conservator::{PooledConnection, Error};
 

@@ -14,6 +14,7 @@ import Dashboard from "@/pages/Dashboard";
 import Models from "@/pages/Models";
 import ApiKeys from "@/pages/ApiKeys";
 import Usage from "@/pages/Usage";
+import Billing from "@/pages/Billing";
 import Profile from "@/pages/Profile";
 import AdminProviders from "@/pages/admin/Providers";
 import AdminUsers from "@/pages/admin/Users";
@@ -96,6 +97,7 @@ function AppRoutes() {
           <Route path="models" element={<Models />} />
           <Route path="api-keys" element={<ApiKeys />} />
           <Route path="usage" element={<Usage />} />
+          <Route path="billing" element={<Billing />} />
           <Route path="profile" element={<Profile />} />
           <Route path="admin/providers" element={<AdminProviders />} />
           <Route path="admin/users" element={<AdminUsers />} />

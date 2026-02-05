@@ -11,6 +11,7 @@ import {
   X,
   Server,
   Users,
+  Receipt,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,6 +34,7 @@ export default function Layout() {
     { name: "Models", icon: Cpu, href: "/models" },
     { name: "API Keys", icon: Key, href: "/api-keys" },
     { name: "Usage", icon: BarChart3, href: "/usage" },
+    { name: "Billing", icon: Receipt, href: "/billing" },
     { name: "Profile", icon: User, href: "/profile" },
   ];
 

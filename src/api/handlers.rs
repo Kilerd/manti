@@ -2,6 +2,7 @@ use crate::{
     auth::{AuthContext, JwtConfig},
     models::{
         api_key::{ApiKeyInfo, CreateApiKey, CreateApiKeyRequest},
+        billing::BillingInfo,
         model::ModelInfo,
         usage::UsageInfo,
         user::{CreateUser, CreateUserRequest, LoginRequest, LoginResponse, UserInfo},
@@ -364,4 +365,45 @@ pub async fn health_check() -> Json<HealthCheckResponse> {
         service: "manti-llm-gateway".to_string(),
         timestamp: Utc::now(),
     })
+}
+
+// Billing handlers
+
+/// List all billing records for the authenticated user
+#[gotcha::api(group = "Billing")]
+pub async fn list_billings(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Db>,
+) -> Result<Json<Vec<BillingInfo>>, StatusCode> {
+    let user_id = auth.require_auth()?;
+
+    let billings = db
+        .list_user_billings(user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(billings.into_iter().map(|b| b.into()).collect()))
+}
+
+/// Get a specific billing record
+#[gotcha::api(group = "Billing")]
+pub async fn get_billing(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Db>,
+    Path(billing_id): Path<Uuid>,
+) -> Result<Json<BillingInfo>, StatusCode> {
+    let user_id = auth.require_auth()?;
+
+    let billing = db
+        .get_billing(billing_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Verify ownership
+    if billing.user_id != user_id {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    Ok(Json(billing.into()))
 }
