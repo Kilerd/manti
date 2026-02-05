@@ -14,42 +14,38 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { client, type UsageRecord, type UsageSummary } from "@/api";
-import { cn } from "@/lib/utils";
+import { getUsage, getUsageStats, type UsageRecord, type UsageStats } from "@/api";
 
 export default function Usage() {
   const [usageHistory, setUsageHistory] = useState<UsageRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<UsageSummary>({
-    totalRequests: 0,
-    totalTokens: 0,
-    totalCost: 0,
+  const [stats, setStats] = useState<UsageStats>({
+    active_keys: 0,
+    total_requests: 0,
+    total_tokens: 0,
+    total_cost: 0,
   });
 
   useEffect(() => {
-    fetchUsageHistory();
+    fetchUsageData();
   }, []);
 
-  const fetchUsageHistory = async () => {
+  const fetchUsageData = async () => {
     try {
-      const { data, error } = await client.GET("/usage/history", {
-        params: { query: { limit: 100 } },
+      const [usageResponse, statsData] = await Promise.all([
+        getUsage({}),
+        getUsageStats(),
+      ]);
+
+      setUsageHistory(usageResponse.data ?? []);
+      setStats(statsData ?? {
+        active_keys: 0,
+        total_requests: 0,
+        total_tokens: 0,
+        total_cost: 0,
       });
-
-      if (error || !data) {
-        throw new Error("Failed to fetch usage history");
-      }
-
-      setUsageHistory(data.history || []);
-      setSummary(
-        data.summary || {
-          totalRequests: 0,
-          totalTokens: 0,
-          totalCost: 0,
-        }
-      );
     } catch (err) {
-      console.error("Failed to fetch usage history:", err);
+      console.error("Failed to fetch usage data:", err);
     } finally {
       setLoading(false);
     }
@@ -72,16 +68,16 @@ export default function Usage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {summary.totalRequests.toLocaleString()}
+              {(stats.total_requests ?? 0).toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">All time</p>
           </CardContent>
         </Card>
 
@@ -91,9 +87,9 @@ export default function Usage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {summary.totalTokens.toLocaleString()}
+              {(stats.total_tokens ?? 0).toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">All time</p>
           </CardContent>
         </Card>
 
@@ -103,9 +99,21 @@ export default function Usage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${summary.totalCost.toFixed(4)}
+              ${(stats.total_cost ?? 0).toFixed(4)}
             </div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">All time</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Active Keys</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats.active_keys ?? 0}
+            </div>
+            <p className="text-xs text-muted-foreground">API keys</p>
           </CardContent>
         </Card>
       </div>
@@ -113,7 +121,7 @@ export default function Usage() {
       <Card>
         <CardHeader>
           <CardTitle>Recent Requests</CardTitle>
-          <CardDescription>Your last 100 API requests</CardDescription>
+          <CardDescription>Your recent API requests</CardDescription>
         </CardHeader>
         <CardContent>
           {usageHistory.length === 0 ? (
@@ -126,38 +134,27 @@ export default function Usage() {
                 <TableRow>
                   <TableHead>Timestamp</TableHead>
                   <TableHead>Model</TableHead>
-                  <TableHead>Input Tokens</TableHead>
-                  <TableHead>Output Tokens</TableHead>
+                  <TableHead>Provider</TableHead>
+                  <TableHead>Prompt Tokens</TableHead>
+                  <TableHead>Completion Tokens</TableHead>
                   <TableHead>Total Tokens</TableHead>
                   <TableHead>Cost</TableHead>
-                  <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {usageHistory.map((record) => (
                   <TableRow key={record.id}>
                     <TableCell className="text-sm">
-                      {new Date(record.timestamp).toLocaleString()}
+                      {new Date(record.created_at).toLocaleString()}
                     </TableCell>
                     <TableCell className="font-mono text-sm">
                       {record.model}
                     </TableCell>
-                    <TableCell>{record.inputTokens.toLocaleString()}</TableCell>
-                    <TableCell>{record.outputTokens.toLocaleString()}</TableCell>
-                    <TableCell>{record.totalTokens.toLocaleString()}</TableCell>
+                    <TableCell>{record.provider}</TableCell>
+                    <TableCell>{record.prompt_tokens.toLocaleString()}</TableCell>
+                    <TableCell>{record.completion_tokens.toLocaleString()}</TableCell>
+                    <TableCell>{record.total_tokens.toLocaleString()}</TableCell>
                     <TableCell>${record.cost.toFixed(4)}</TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          "px-2 py-1 text-xs rounded-full",
-                          record.status === "success"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        )}
-                      >
-                        {record.status}
-                      </span>
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

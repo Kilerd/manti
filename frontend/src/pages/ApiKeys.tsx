@@ -27,17 +27,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { client, type ApiKey } from "@/api";
+import {
+  listApiKeys,
+  createApiKey,
+  revokeApiKey,
+  type ApiKeyListItem,
+  type ApiKeyCreateResponse,
+} from "@/api";
 import { toast } from "@/hooks/use-toast";
-import { Copy, Trash2, Plus, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Copy, Trash2, Plus, AlertCircle } from "lucide-react";
 
 export default function ApiKeys() {
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [apiKeys, setApiKeys] = useState<ApiKeyListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
-  const [showKey, setShowKey] = useState<Record<string, boolean>>({});
-  const [newKey, setNewKey] = useState<string | null>(null);
+  const [newKey, setNewKey] = useState<ApiKeyCreateResponse | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [keyToDelete, setKeyToDelete] = useState<{
     id: string;
@@ -65,13 +70,8 @@ export default function ApiKeys() {
 
   const fetchApiKeys = async () => {
     try {
-      const { data, error } = await client.GET("/api-keys");
-
-      if (error || !data) {
-        throw new Error("Failed to fetch API keys");
-      }
-
-      setApiKeys(data);
+      const response = await listApiKeys({});
+      setApiKeys(response.data);
     } catch {
       toast({
         title: "Error",
@@ -88,19 +88,18 @@ export default function ApiKeys() {
 
     setCreating(true);
     try {
-      const { data, error } = await client.POST("/api-keys", {
-        body: { name: newKeyName },
-      });
+      const response = await createApiKey({ name: newKeyName });
+      const data = response.data;
 
-      if (error || !data) {
-        throw new Error(
-          (error as { message?: string })?.message ||
-            "Failed to create API key"
-        );
-      }
-
-      setNewKey(data.key);
-      setApiKeys([...apiKeys, data]);
+      setNewKey(data);
+      const listItem: ApiKeyListItem = {
+        id: data.id,
+        name: data.name,
+        prefix: data.prefix,
+        created_at: data.created_at,
+        is_active: true,
+      };
+      setApiKeys([...apiKeys, listItem]);
       setNewKeyName("");
 
       toast({
@@ -130,16 +129,7 @@ export default function ApiKeys() {
     if (!keyToDelete) return;
 
     try {
-      const { error } = await client.DELETE("/api-keys/{id}", {
-        params: { path: { id: keyToDelete.id } },
-      });
-
-      if (error) {
-        throw new Error(
-          (error as { message?: string })?.message ||
-            "Failed to delete API key"
-        );
-      }
+      await revokeApiKey({ id: keyToDelete.id });
 
       setApiKeys(apiKeys.filter((key) => key.id !== keyToDelete.id));
 
@@ -178,14 +168,6 @@ export default function ApiKeys() {
           variant: "destructive",
         });
       });
-  };
-
-  const toggleKeyVisibility = (keyId: string) => {
-    setShowKey({ ...showKey, [keyId]: !showKey[keyId] });
-  };
-
-  const maskKey = (key: string) => {
-    return key.substring(0, 8) + "..." + key.substring(key.length - 4);
   };
 
   const handleKeyPress = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -228,10 +210,10 @@ export default function ApiKeys() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center space-x-2">
-              <Input value={newKey} readOnly className="font-mono" />
+              <Input value={newKey.key} readOnly className="font-mono" />
               <Button
                 size="icon"
-                onClick={() => copyToClipboard(newKey, "new key")}
+                onClick={() => copyToClipboard(newKey.key, newKey.name)}
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -302,44 +284,19 @@ export default function ApiKeys() {
                     <TableCell className="font-medium">{apiKey.name}</TableCell>
                     <TableCell className="font-mono text-sm">
                       <div className="flex items-center space-x-2">
-                        <span>
-                          {showKey[apiKey.id]
-                            ? apiKey.key
-                            : maskKey(apiKey.key)}
-                        </span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6"
-                          onClick={() => toggleKeyVisibility(apiKey.id)}
-                        >
-                          {showKey[apiKey.id] ? (
-                            <EyeOff className="h-3 w-3" />
-                          ) : (
-                            <Eye className="h-3 w-3" />
-                          )}
-                        </Button>
+                        <span>{apiKey.prefix}...</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      {new Date(apiKey.createdAt).toLocaleDateString()}
+                      {new Date(apiKey.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      {apiKey.lastUsedAt
-                        ? new Date(apiKey.lastUsedAt).toLocaleDateString()
+                      {apiKey.last_used
+                        ? new Date(apiKey.last_used).toLocaleDateString()
                         : "Never"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end space-x-2">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() =>
-                            copyToClipboard(apiKey.key, apiKey.name)
-                          }
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"

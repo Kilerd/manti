@@ -85,7 +85,7 @@ export default function Layout() {
           <div className="p-4 border-t space-y-3">
             {user && (
               <div className="px-3 py-2 text-sm text-muted-foreground">
-                <div className="font-medium">{user.name || user.email}</div>
+                <div className="font-medium">{user.username || user.email}</div>
                 <div className="text-xs">{user.email}</div>
               </div>
             )}

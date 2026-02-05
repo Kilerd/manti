@@ -137,7 +137,6 @@ pub async fn logout() -> Result<Json<serde_json::Value>, StatusCode> {
 
 /// Refresh token request
 #[derive(Deserialize, Schematic)]
-#[serde(rename_all = "camelCase")]
 pub struct RefreshTokenRequest {
     pub refresh_token: String,
 }
@@ -314,7 +313,6 @@ pub async fn get_usage(
 
 /// Dashboard stats response
 #[derive(serde::Serialize, Schematic)]
-#[serde(rename_all = "camelCase")]
 pub struct DashboardStats {
     pub total_requests: i64,
     pub total_tokens: i64,

@@ -21,7 +21,7 @@ export default function Register() {
     email: "",
     password: "",
     confirmPassword: "",
-    name: "",
+    username: "",
   });
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -38,7 +38,7 @@ export default function Register() {
     const result = await register({
       email: formData.email,
       password: formData.password,
-      name: formData.name,
+      username: formData.username,
     });
 
     if (!result.success) {
@@ -64,14 +64,14 @@ export default function Register() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="name"
+                id="username"
                 type="text"
-                placeholder="Enter your name"
-                value={formData.name}
+                placeholder="Enter your username"
+                value={formData.username}
                 onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
+                  setFormData({ ...formData, username: e.target.value })
                 }
                 required
               />

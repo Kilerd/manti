@@ -1,13 +1,5 @@
-import createClient from "openapi-fetch";
-import type {
-  paths,
-  User,
-  UserProfile,
-  ApiKey,
-  UsageStats,
-  UsageRecord,
-  UsageSummary,
-} from "./schema";
+import { Fetcher } from "openapi-typescript-fetch";
+import type { paths, operations } from "./schema";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
@@ -16,153 +8,85 @@ if (import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL) {
   console.warn("VITE_API_BASE_URL is not set in production environment");
 }
 
-// Token refresh state
-let isRefreshing = false;
-interface QueueItem {
-  resolve: (token: string) => void;
-  reject: (error: Error) => void;
-}
-let failedQueue: QueueItem[] = [];
+// Create fetcher instance
+const fetcher = Fetcher.for<paths>();
 
-function processQueue(error: Error | null, token: string | null = null) {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else if (token) {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-}
-
-// Create the base client
-const baseClient = createClient<paths>({
+fetcher.configure({
   baseUrl: API_BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
+  init: {
+    headers: {
+      "Content-Type": "application/json",
+    },
   },
+  use: [
+    // Auth middleware - add token to requests
+    async (url, init, next) => {
+      const token = localStorage.getItem("token");
+      if (token) {
+        init.headers.set("Authorization", `Bearer ${token}`);
+      }
+      return next(url, init);
+    },
+  ],
 });
 
-// Add auth middleware
-baseClient.use({
-  async onRequest({ request }) {
-    const token = localStorage.getItem("token");
-    if (token) {
-      request.headers.set("Authorization", `Bearer ${token}`);
-    }
-    return request;
-  },
-  async onResponse({ response, request }) {
-    if (response.status === 401 && !request.headers.get("X-Retry")) {
-      // Handle token refresh
-      if (isRefreshing) {
-        return new Promise<Response>((resolve, reject) => {
-          failedQueue.push({
-            resolve: async (token: string) => {
-              const newRequest = request.clone();
-              newRequest.headers.set("Authorization", `Bearer ${token}`);
-              newRequest.headers.set("X-Retry", "true");
-              try {
-                const retryResponse = await fetch(newRequest);
-                resolve(retryResponse);
-              } catch (err) {
-                reject(err as Error);
-              }
-            },
-            reject,
-          });
-        });
-      }
+// ============ Auth API ============
+export const login = fetcher.path("/auth/login").method("post").create();
+export const register = fetcher.path("/auth/register").method("post").create();
+export const logout = fetcher.path("/auth/logout").method("post").create();
+export const validateToken = fetcher.path("/auth/validate").method("get").create();
+export const refreshToken = fetcher.path("/auth/refresh").method("post").create();
 
-      isRefreshing = true;
+// ============ User API ============
+export const getCurrentUser = fetcher.path("/user/profile").method("get").create();
+export const updateProfile = fetcher.path("/user/profile").method("put").create();
 
-      const refreshToken = localStorage.getItem("refreshToken");
-      if (!refreshToken) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("refreshToken");
-        window.dispatchEvent(
-          new CustomEvent("auth:logout", {
-            detail: { reason: "session_expired" },
-          })
-        );
-        isRefreshing = false;
-        return response;
-      }
+// ============ API Keys ============
+export const listApiKeys = fetcher.path("/api-keys").method("get").create();
+export const createApiKey = fetcher.path("/api-keys").method("post").create();
+export const revokeApiKey = fetcher.path("/api-keys/{id}").method("delete").create();
 
-      try {
-        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken }),
-        });
+// ============ Usage API ============
+export const getUsage = fetcher.path("/usage").method("get").create();
+// Note: getUsageStats has duplicate operation name issue in schema,
+// using manual fetch as workaround
+export async function getUsageStats(): Promise<UsageStats> {
+  const response = await fetch(`${API_BASE_URL}/usage/stats`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch usage stats");
+  }
+  return response.json();
+}
 
-        if (!refreshResponse.ok) {
-          throw new Error("Refresh failed");
-        }
+// ============ Type exports ============
+export type User =
+  operations["login"]["responses"]["200"]["content"]["application/json"]["user"];
 
-        const data = await refreshResponse.json();
-        const newToken = data.token as string;
-        localStorage.setItem("token", newToken);
+export type ApiKeyListItem =
+  operations["list_api_keys"]["responses"]["200"]["content"]["application/json"][number];
 
-        processQueue(null, newToken);
-
-        // Retry original request
-        const newRequest = request.clone();
-        newRequest.headers.set("Authorization", `Bearer ${newToken}`);
-        newRequest.headers.set("X-Retry", "true");
-        return fetch(newRequest);
-      } catch (err) {
-        processQueue(err as Error, null);
-        localStorage.removeItem("token");
-        localStorage.removeItem("refreshToken");
-        window.dispatchEvent(
-          new CustomEvent("auth:logout", {
-            detail: { reason: "refresh_failed" },
-          })
-        );
-        return response;
-      } finally {
-        isRefreshing = false;
-      }
-    }
-    return response;
-  },
-});
-
-// Export typed client
-export const client = baseClient;
-
-// Re-export types
-export type {
-  paths,
-  User,
-  UserProfile,
-  ApiKey,
-  UsageStats,
-  UsageRecord,
-  UsageSummary,
-};
-
-// Helper types for API responses
-export type ApiResponse<T> = {
-  data?: T;
-  error?: { message?: string };
-  response: Response;
-};
-
-export type AuthLoginResponse =
-  paths["/auth/login"]["post"]["responses"]["200"]["content"]["application/json"];
-export type AuthRegisterResponse =
-  paths["/auth/register"]["post"]["responses"]["200"]["content"]["application/json"];
-export type AuthValidateResponse =
-  paths["/auth/validate"]["get"]["responses"]["200"]["content"]["application/json"];
-
-export type ApiKeyListResponse =
-  paths["/api-keys"]["get"]["responses"]["200"]["content"]["application/json"];
 export type ApiKeyCreateResponse =
-  paths["/api-keys"]["post"]["responses"]["200"]["content"]["application/json"];
+  operations["create_api_key"]["responses"]["200"]["content"]["application/json"];
 
-export type UsageHistoryResponse =
-  paths["/usage/history"]["get"]["responses"]["200"]["content"]["application/json"];
+export type ApiKey = ApiKeyListItem;
+
+// Define UsageStats inline due to schema duplicate operation name issue
+export interface UsageStats {
+  active_keys: number;
+  total_cost: number;
+  total_requests: number;
+  total_tokens: number;
+}
+
+export type UsageRecord =
+  operations["get_usage"]["responses"]["200"]["content"]["application/json"][number];
+
+// Re-export paths
+export type { paths, operations };
 
 export { API_BASE_URL };

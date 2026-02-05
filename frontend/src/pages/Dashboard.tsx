@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { client, type UsageStats } from "@/api";
+import { getUsageStats, type UsageStats } from "@/api";
 import { toast } from "@/hooks/use-toast";
 import {
   BarChart3,
@@ -21,10 +21,10 @@ import {
 
 export default function Dashboard() {
   const [stats, setStats] = useState<UsageStats>({
-    totalRequests: 0,
-    totalTokens: 0,
-    totalCost: 0,
-    activeKeys: 0,
+    total_requests: 0,
+    total_tokens: 0,
+    total_cost: 0,
+    active_keys: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,16 +43,13 @@ export default function Dashboard() {
     setError(null);
 
     try {
-      const { data, error: apiError } = await client.GET("/usage/stats");
-
-      if (apiError || !data) {
-        throw new Error(
-          (apiError as { message?: string })?.message ||
-            "Failed to fetch statistics"
-        );
-      }
-
-      setStats(data);
+      const data = await getUsageStats();
+      setStats(data ?? {
+        total_requests: 0,
+        total_tokens: 0,
+        total_cost: 0,
+        active_keys: 0,
+      });
 
       if (isRefresh) {
         toast({
@@ -90,25 +87,25 @@ export default function Dashboard() {
   }[] = [
     {
       title: "Total Requests",
-      value: stats.totalRequests.toLocaleString(),
+      value: (stats.total_requests ?? 0).toLocaleString(),
       icon: BarChart3,
-      description: "API calls this month",
+      description: "API calls",
     },
     {
       title: "Tokens Used",
-      value: stats.totalTokens.toLocaleString(),
+      value: (stats.total_tokens ?? 0).toLocaleString(),
       icon: Activity,
       description: "Total tokens consumed",
     },
     {
       title: "Total Cost",
-      value: `$${stats.totalCost.toFixed(2)}`,
+      value: `$${(stats.total_cost ?? 0).toFixed(2)}`,
       icon: DollarSign,
-      description: "Usage cost this month",
+      description: "Usage cost",
     },
     {
       title: "Active API Keys",
-      value: stats.activeKeys,
+      value: stats.active_keys ?? 0,
       icon: Key,
       description: "Currently active keys",
     },

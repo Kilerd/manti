@@ -6,7 +6,14 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { client, type User } from "@/api";
+import {
+  login as apiLogin,
+  register as apiRegister,
+  logout as apiLogout,
+  validateToken,
+  refreshToken as apiRefreshToken,
+  type User,
+} from "@/api";
 import { toast } from "@/hooks/use-toast";
 
 interface AuthContextValue {
@@ -19,7 +26,7 @@ interface AuthContextValue {
   register: (userData: {
     email: string;
     password: string;
-    name: string;
+    username: string;
   }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<string>;
@@ -81,13 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { data, error } = await client.GET("/auth/validate");
-
-      if (error || !data) {
-        throw new Error("Validation failed");
-      }
-
-      setUser(data.user);
+      const response = await validateToken({});
+      setUser(response.data.user);
     } catch {
       localStorage.removeItem("token");
       setUser(null);
@@ -110,30 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (credentials: { email: string; password: string }) => {
     try {
-      const { data, error } = await client.POST("/auth/login", {
-        body: credentials,
-      });
+      const response = await apiLogin(credentials);
 
-      if (error || !data) {
-        const message =
-          (error as { message?: string })?.message ||
-          "Login failed. Please try again.";
-        toast({
-          title: "Login Failed",
-          description: message,
-          variant: "destructive",
-        });
-        return { success: false, error: message };
-      }
-
-      const { token, user: userData, refreshToken: refresh } = data;
-
-      localStorage.setItem("token", token);
-      if (refresh) {
-        localStorage.setItem("refreshToken", refresh);
-      }
-
-      setUser(userData);
+      localStorage.setItem("token", response.data.token);
+      setUser(response.data.user);
 
       toast({
         title: "Login Successful",
@@ -157,33 +139,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (userData: {
     email: string;
     password: string;
-    name: string;
+    username: string;
   }) => {
     try {
-      const { data, error } = await client.POST("/auth/register", {
-        body: userData,
-      });
+      const response = await apiRegister(userData);
 
-      if (error || !data) {
-        const message =
-          (error as { message?: string })?.message ||
-          "Registration failed. Please try again.";
-        toast({
-          title: "Registration Failed",
-          description: message,
-          variant: "destructive",
-        });
-        return { success: false, error: message };
-      }
-
-      const { token, user: newUser, refreshToken: refresh } = data;
-
-      localStorage.setItem("token", token);
-      if (refresh) {
-        localStorage.setItem("refreshToken", refresh);
-      }
-
-      setUser(newUser);
+      localStorage.setItem("token", response.data.token);
+      setUser(response.data.user);
 
       toast({
         title: "Registration Successful",
@@ -208,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await client.POST("/auth/logout");
+      await apiLogout({});
     } catch {
       // Ignore logout errors
     } finally {
@@ -233,18 +195,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { data, error } = await client.POST("/auth/refresh", {
-        body: { refreshToken: refresh },
-      });
-
-      if (error || !data) {
-        throw new Error("Refresh failed");
-      }
-
-      const { token } = data;
-
-      localStorage.setItem("token", token);
-      return token;
+      await apiRefreshToken({ refresh_token: refresh });
+      // Token refresh is handled by the middleware in api/index.ts
+      return refresh;
     } catch {
       localStorage.removeItem("token");
       localStorage.removeItem("refreshToken");

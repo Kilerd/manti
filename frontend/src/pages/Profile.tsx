@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { client, type UserProfile } from "@/api";
+import { getCurrentUser, updateProfile, type User } from "@/api";
 import { toast } from "@/hooks/use-toast";
 import { Check, X, AlertCircle } from "lucide-react";
 
@@ -140,25 +140,20 @@ function PasswordStrengthIndicator({ password }: { password: string }) {
 }
 
 interface FormErrors {
-  name?: string;
+  username?: string;
   currentPassword?: string;
   newPassword?: string;
   confirmPassword?: string;
 }
 
 export default function Profile() {
-  const [profile, setProfile] = useState<UserProfile>({
-    id: "",
-    name: "",
-    email: "",
-    createdAt: "",
-  });
+  const [profile, setProfile] = useState<User | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [passwordErrors, setPasswordErrors] = useState<FormErrors>({});
   const [formData, setFormData] = useState({
-    name: "",
+    username: "",
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
@@ -170,14 +165,9 @@ export default function Profile() {
 
   const fetchProfile = async () => {
     try {
-      const { data, error } = await client.GET("/user/profile");
-
-      if (error || !data) {
-        throw new Error("Failed to fetch profile");
-      }
-
-      setProfile(data);
-      setFormData((prev) => ({ ...prev, name: data.name }));
+      const response = await getCurrentUser({});
+      setProfile(response.data);
+      setFormData((prev) => ({ ...prev, username: response.data.username }));
     } catch {
       toast({
         title: "Error",
@@ -192,8 +182,8 @@ export default function Profile() {
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
 
-    if (!formData.name.trim()) {
-      errors.name = "Name is required";
+    if (!formData.username.trim()) {
+      errors.username = "Username is required";
     }
 
     if (
@@ -240,29 +230,9 @@ export default function Profile() {
 
     setSaving(true);
     try {
-      const updateData: {
-        name?: string;
-        currentPassword?: string;
-        newPassword?: string;
-      } = { name: formData.name };
+      const response = await updateProfile({ username: formData.username });
 
-      if (formData.newPassword) {
-        updateData.currentPassword = formData.currentPassword;
-        updateData.newPassword = formData.newPassword;
-      }
-
-      const { error } = await client.PUT("/user/profile", {
-        body: updateData,
-      });
-
-      if (error) {
-        throw new Error(
-          (error as { message?: string })?.message ||
-            "Failed to update profile"
-        );
-      }
-
-      setProfile({ ...profile, name: formData.name });
+      setProfile(response.data);
       setEditing(false);
       setFormData({
         ...formData,
@@ -316,25 +286,25 @@ export default function Profile() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" value={profile.email} disabled />
+            <Input id="email" value={profile?.email || ""} disabled />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
-              id="name"
-              value={editing ? formData.name : profile.name}
+              id="username"
+              value={editing ? formData.username : (profile?.username || "")}
               onChange={(e) => {
-                setFormData({ ...formData, name: e.target.value });
-                setPasswordErrors({ ...passwordErrors, name: undefined });
+                setFormData({ ...formData, username: e.target.value });
+                setPasswordErrors({ ...passwordErrors, username: undefined });
               }}
               disabled={!editing}
-              className={passwordErrors.name ? "border-destructive" : ""}
+              className={passwordErrors.username ? "border-destructive" : ""}
             />
-            {passwordErrors.name && (
+            {passwordErrors.username && (
               <p className="text-xs text-destructive flex items-center gap-1">
                 <AlertCircle className="h-3 w-3" />
-                {passwordErrors.name}
+                {passwordErrors.username}
               </p>
             )}
           </div>
@@ -342,7 +312,7 @@ export default function Profile() {
           <div className="space-y-2">
             <Label>Member Since</Label>
             <Input
-              value={new Date(profile.createdAt).toLocaleDateString()}
+              value={profile ? new Date(profile.created_at).toLocaleDateString() : ""}
               disabled
             />
           </div>
@@ -458,7 +428,7 @@ export default function Profile() {
                     setEditing(false);
                     setPasswordErrors({});
                     setFormData({
-                      name: profile.name,
+                      username: profile?.username || "",
                       currentPassword: "",
                       newPassword: "",
                       confirmPassword: "",
