@@ -850,9 +850,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .post("/auth/logout", handlers::logout)
         // Models route
         .get("/models", handlers::list_available_models)
+        // User balance route
+        .get("/user/balance", handlers::get_my_balance)
         // API key routes
         .post("/api-keys", handlers::create_api_key)
         .get("/api-keys", handlers::list_api_keys)
+        .get("/api-keys/stats", handlers::get_api_key_stats)
         .delete("/api-keys/:id", handlers::revoke_api_key)
         // Usage routes
         .get("/usage", handlers::get_usage)

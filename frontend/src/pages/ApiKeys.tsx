@@ -31,13 +31,16 @@ import {
   listApiKeys,
   createApiKey,
   revokeApiKey,
+  getApiKeyStats,
   type ApiKeyListItem,
+  type ApiKeyStats,
 } from "@/api";
 import { toast } from "@/hooks/use-toast";
 import { Copy, Trash2, Plus, Eye, EyeOff } from "lucide-react";
 
 export default function ApiKeys() {
   const [apiKeys, setApiKeys] = useState<ApiKeyListItem[]>([]);
+  const [keyStats, setKeyStats] = useState<Map<string, ApiKeyStats>>(new Map());
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
@@ -54,8 +57,17 @@ export default function ApiKeys() {
 
   const fetchApiKeys = async () => {
     try {
-      const response = await listApiKeys({});
-      setApiKeys(response.data);
+      const [keysResponse, statsData] = await Promise.all([
+        listApiKeys({}),
+        getApiKeyStats().catch(() => []),
+      ]);
+      setApiKeys(keysResponse.data);
+
+      const statsMap = new Map<string, ApiKeyStats>();
+      for (const stat of statsData) {
+        statsMap.set(stat.api_key_id, stat);
+      }
+      setKeyStats(statsMap);
     } catch {
       toast({
         title: "Error",
@@ -237,70 +249,85 @@ export default function ApiKeys() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Key</TableHead>
+                  <TableHead className="text-right">Requests</TableHead>
+                  <TableHead className="text-right">Tokens</TableHead>
+                  <TableHead className="text-right">Cost</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Last Used</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {apiKeys.map((apiKey) => (
-                  <TableRow key={apiKey.id}>
-                    <TableCell className="font-medium">{apiKey.name}</TableCell>
-                    <TableCell className="font-mono text-sm">
-                      <div className="flex items-center space-x-2">
-                        <span className="max-w-[300px] truncate">
-                          {visibleKeys.has(apiKey.id)
-                            ? apiKey.key
-                            : maskKey(apiKey.key)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(apiKey.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      {apiKey.last_used
-                        ? new Date(apiKey.last_used).toLocaleDateString()
-                        : "Never"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end space-x-2">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => toggleKeyVisibility(apiKey.id)}
-                          title={
-                            visibleKeys.has(apiKey.id) ? "Hide key" : "Show key"
-                          }
-                        >
-                          {visibleKeys.has(apiKey.id) ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => copyToClipboard(apiKey.key, apiKey.name)}
-                          title="Copy to clipboard"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() =>
-                            confirmDeleteKey(apiKey.id, apiKey.name)
-                          }
-                          title="Delete key"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {apiKeys.map((apiKey) => {
+                  const stats = keyStats.get(apiKey.id);
+                  return (
+                    <TableRow key={apiKey.id}>
+                      <TableCell className="font-medium">{apiKey.name}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        <div className="flex items-center space-x-2">
+                          <span className="max-w-[200px] truncate">
+                            {visibleKeys.has(apiKey.id)
+                              ? apiKey.key
+                              : maskKey(apiKey.key)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {stats?.total_requests.toLocaleString() ?? "0"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {stats?.total_tokens.toLocaleString() ?? "0"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        ${stats?.total_cost.toFixed(4) ?? "0.0000"}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(apiKey.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {apiKey.last_used
+                          ? new Date(apiKey.last_used).toLocaleDateString()
+                          : "Never"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end space-x-2">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => toggleKeyVisibility(apiKey.id)}
+                            title={
+                              visibleKeys.has(apiKey.id) ? "Hide key" : "Show key"
+                            }
+                          >
+                            {visibleKeys.has(apiKey.id) ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => copyToClipboard(apiKey.key, apiKey.name)}
+                            title="Copy to clipboard"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() =>
+                              confirmDeleteKey(apiKey.id, apiKey.name)
+                            }
+                            title="Delete key"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

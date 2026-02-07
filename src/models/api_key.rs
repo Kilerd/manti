@@ -155,3 +155,13 @@ impl From<ApiKey> for ApiKeyInfo {
         }
     }
 }
+
+/// API Key usage statistics
+#[derive(Debug, Clone, Serialize, Schematic)]
+pub struct ApiKeyStats {
+    pub api_key_id: Uuid,
+    pub api_key_name: String,
+    pub total_requests: i64,
+    pub total_tokens: i64,
+    pub total_cost: f64,
+}

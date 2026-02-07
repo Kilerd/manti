@@ -1,8 +1,8 @@
 use crate::{
     auth::{AuthContext, JwtConfig},
     models::{
-        api_key::{ApiKeyInfo, CreateApiKey, CreateApiKeyRequest},
-        billing::BillingInfo,
+        api_key::{ApiKeyInfo, ApiKeyStats, CreateApiKey, CreateApiKeyRequest},
+        billing::{BillingInfo, UserBalanceInfo},
         model::ModelInfo,
         usage::UsageInfo,
         user::{CreateUser, CreateUserRequest, LoginRequest, LoginResponse, UserInfo},
@@ -365,6 +365,43 @@ pub async fn health_check() -> Json<HealthCheckResponse> {
         service: "manti-llm-gateway".to_string(),
         timestamp: Utc::now(),
     })
+}
+
+// API Key stats
+
+/// Get usage statistics for all API keys of the authenticated user
+#[gotcha::api(group = "API Keys")]
+pub async fn get_api_key_stats(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Db>,
+) -> Result<Json<Vec<ApiKeyStats>>, StatusCode> {
+    let user_id = auth.require_auth()?;
+
+    let stats = db
+        .get_api_key_usage_stats(user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(stats))
+}
+
+// User balance handlers
+
+/// Get current user's balance
+#[gotcha::api(group = "User")]
+pub async fn get_my_balance(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Db>,
+) -> Result<Json<UserBalanceInfo>, StatusCode> {
+    let user_id = auth.require_auth()?;
+
+    let balance = db
+        .get_user_balance(user_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(balance.into()))
 }
 
 // Billing handlers

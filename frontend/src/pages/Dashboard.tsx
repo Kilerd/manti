@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getUsageStats, type UsageStats } from "@/api";
+import { getUsageStats, getMyBalance, type UsageStats, type UserBalance } from "@/api";
 import { toast } from "@/hooks/use-toast";
 import {
   BarChart3,
@@ -16,6 +16,7 @@ import {
   Key,
   RefreshCw,
   AlertCircle,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -26,15 +27,16 @@ export default function Dashboard() {
     total_cost: 0,
     active_keys: 0,
   });
+  const [balance, setBalance] = useState<UserBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchStats();
+    fetchData();
   }, []);
 
-  const fetchStats = async (isRefresh = false) => {
+  const fetchData = async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
     } else {
@@ -43,13 +45,18 @@ export default function Dashboard() {
     setError(null);
 
     try {
-      const data = await getUsageStats();
-      setStats(data ?? {
+      const [statsData, balanceData] = await Promise.all([
+        getUsageStats(),
+        getMyBalance().catch(() => null),
+      ]);
+
+      setStats(statsData ?? {
         total_requests: 0,
         total_tokens: 0,
         total_cost: 0,
         active_keys: 0,
       });
+      setBalance(balanceData);
 
       if (isRefresh) {
         toast({
@@ -76,7 +83,7 @@ export default function Dashboard() {
   };
 
   const handleRefresh = () => {
-    fetchStats(true);
+    fetchData(true);
   };
 
   const statCards: {
@@ -127,7 +134,7 @@ export default function Dashboard() {
           <span>Failed to load dashboard</span>
         </div>
         <p className="text-sm text-muted-foreground">{error}</p>
-        <Button onClick={() => fetchStats(false)} variant="outline">
+        <Button onClick={() => fetchData(false)} variant="outline">
           <RefreshCw className="h-4 w-4 mr-2" />
           Try Again
         </Button>
@@ -156,6 +163,39 @@ export default function Dashboard() {
           Refresh
         </Button>
       </div>
+
+      {balance && (
+        <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-primary" />
+              <CardTitle className="text-lg">Account Balance</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Current Balance</p>
+                <p className="text-2xl font-bold text-primary">
+                  ${parseFloat(balance.balance).toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Credit Limit</p>
+                <p className="text-2xl font-bold">
+                  ${parseFloat(balance.credit_limit).toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Lifetime Usage</p>
+                <p className="text-2xl font-bold">
+                  ${parseFloat(balance.lifetime_usage).toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat, index) => (

@@ -65,7 +65,7 @@ export const deleteModel = fetcher.path("/admin/models/{id}").method("delete").c
 export const listUsers = fetcher.path("/admin/users").method("get").create();
 export const updateUserGroups = fetcher.path("/admin/users/{user_id}/groups").method("put").create();
 
-// ============ Admin - Balance ============
+// ============ User Balance ============
 export interface UserBalance {
   user_id: string;
   balance: string;
@@ -74,6 +74,20 @@ export interface UserBalance {
   updated_at: string;
 }
 
+export async function getMyBalance(): Promise<UserBalance> {
+  const response = await fetch(`${API_BASE_URL}/user/balance`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch balance");
+  }
+  return response.json();
+}
+
+// ============ Admin - Balance ============
 export async function getUserBalance(userId: string): Promise<UserBalance> {
   const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/balance`, {
     headers: {
@@ -98,6 +112,28 @@ export async function addUserBalance(userId: string, amount: string): Promise<Us
   });
   if (!response.ok) {
     throw new Error("Failed to add balance");
+  }
+  return response.json();
+}
+
+// ============ API Key Stats ============
+export interface ApiKeyStats {
+  api_key_id: string;
+  api_key_name: string;
+  total_requests: number;
+  total_tokens: number;
+  total_cost: number;
+}
+
+export async function getApiKeyStats(): Promise<ApiKeyStats[]> {
+  const response = await fetch(`${API_BASE_URL}/api-keys/stats`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch API key stats");
   }
   return response.json();
 }

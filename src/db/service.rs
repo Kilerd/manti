@@ -1,5 +1,5 @@
 use crate::models::{
-    api_key::{ApiKey, CreateApiKey},
+    api_key::{ApiKey, ApiKeyStats, CreateApiKey},
     billing::{Billing, CreateBilling, UserBalance},
     usage::{Usage, CreateUsage},
     user::{User, CreateUser},
@@ -664,6 +664,47 @@ impl DatabaseService {
             by_model,
             by_provider,
         })
+    }
+
+    // API Key usage statistics
+
+    /// Get usage statistics grouped by API key for a user
+    pub async fn get_api_key_usage_stats(&self, user_id: Uuid) -> crate::Result<Vec<ApiKeyStats>> {
+        let conn = self.pool.get().await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        // Query usage grouped by api_key_id, joined with api_keys for name
+        let query = r#"
+            SELECT
+                ak.id as api_key_id,
+                ak.name as api_key_name,
+                COALESCE(COUNT(u.id), 0)::bigint as total_requests,
+                COALESCE(SUM(u.total_tokens), 0)::bigint as total_tokens,
+                COALESCE(SUM(u.cost), 0.0)::float8 as total_cost
+            FROM api_keys ak
+            LEFT JOIN usage u ON u.api_key_id = ak.id
+            WHERE ak.user_id = $1
+            GROUP BY ak.id, ak.name
+            ORDER BY total_cost DESC
+        "#;
+
+        let rows = conn
+            .query(query, &[&user_id])
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        let stats = rows
+            .iter()
+            .map(|r| ApiKeyStats {
+                api_key_id: r.get("api_key_id"),
+                api_key_name: r.get("api_key_name"),
+                total_requests: r.get("total_requests"),
+                total_tokens: r.get("total_tokens"),
+                total_cost: r.get("total_cost"),
+            })
+            .collect();
+
+        Ok(stats)
     }
 
     // Billing operations
