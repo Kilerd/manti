@@ -31,17 +31,19 @@ use crate::auth::{auth_middleware, AuthContext};
 use crate::config::Settings;
 use crate::db::DatabaseService;
 use crate::models::{
+    anthropic::{
+        AnthropicErrorDetail, AnthropicErrorResponse, AnthropicRequest, AnthropicStreamEvent,
+    },
     api_key::ApiKey,
     chat::ChatCompletionRequest,
     response::{ChatCompletionResponse, ModelListResponse},
     streaming::ChatCompletionChunk,
-    anthropic::{AnthropicRequest, AnthropicStreamEvent, AnthropicErrorResponse, AnthropicErrorDetail},
     usage::CreateUsage,
     user::User,
 };
 use crate::providers::{model_registry::ModelRegistry, ModelConfig, ProviderConfig, ProviderType};
-use crate::quota::{QuotaChecker, QuotaCheckResult};
-use crate::usage::{UsageRecorder, StreamUsageAggregator};
+use crate::quota::{QuotaCheckResult, QuotaChecker};
+use crate::usage::{StreamUsageAggregator, UsageRecorder};
 use gotcha::axum::extract::State;
 use gotcha::axum::Extension;
 use uuid::Uuid;
@@ -73,7 +75,8 @@ pub static MODEL_REGISTRY: Lazy<Arc<ModelRegistry>> = Lazy::new(|| Arc::new(Mode
 pub static QUOTA_CHECKER: Lazy<Arc<QuotaChecker>> = Lazy::new(|| Arc::new(QuotaChecker::new()));
 
 /// Global usage recorder (initialized in main)
-pub static USAGE_RECORDER: once_cell::sync::OnceCell<Arc<UsageRecorder>> = once_cell::sync::OnceCell::new();
+pub static USAGE_RECORDER: once_cell::sync::OnceCell<Arc<UsageRecorder>> =
+    once_cell::sync::OnceCell::new();
 
 /// Reload all providers and models from database
 pub async fn reload_providers(db: &DatabaseService) -> Result<usize> {
@@ -146,10 +149,12 @@ pub async fn reload_providers(db: &DatabaseService) -> Result<usize> {
             let model_config = ModelConfig {
                 id: model.model_id.clone(),
                 provider: db_config.name.clone(),
-                input_cost_per_1k: model.input_cost_per_1k
+                input_cost_per_1k: model
+                    .input_cost_per_1k
                     .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0))
                     .unwrap_or(0.0),
-                output_cost_per_1k: model.output_cost_per_1k
+                output_cost_per_1k: model
+                    .output_cost_per_1k
                     .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0))
                     .unwrap_or(0.0),
                 max_context: model.max_context.unwrap_or(4096),
@@ -302,50 +307,51 @@ async fn chat_completions(
     };
 
     // Quota check
-    if let Some(ref user) = user {
-        match QUOTA_CHECKER.check_quota(user, &request.model, api_key.as_ref(), &db).await {
-            QuotaCheckResult::Allowed => {}
-            QuotaCheckResult::RateLimited { retry_after_secs } => {
-                return Json(json!({
-                    "error": {
-                        "message": "Rate limit exceeded",
-                        "type": "rate_limit_error",
-                        "code": "rate_limit_exceeded",
-                        "retry_after": retry_after_secs
-                    }
-                }))
-                .into_response();
-            }
-            QuotaCheckResult::QuotaExceeded { limit, used } => {
-                return Json(json!({
-                    "error": {
-                        "message": format!("Monthly quota exceeded (used: {}, limit: {})", used, limit),
-                        "type": "quota_exceeded_error",
-                        "code": "quota_exceeded"
-                    }
-                }))
-                .into_response();
-            }
-            QuotaCheckResult::ModelNotAllowed { model } => {
-                return Json(json!({
-                    "error": {
-                        "message": format!("Model '{}' is not allowed for this API key", model),
-                        "type": "permission_error",
-                        "code": "model_not_allowed"
-                    }
-                }))
-                .into_response();
-            }
-            QuotaCheckResult::InsufficientBalance { .. } => {
-                return Json(json!({
-                    "error": {
-                        "message": "Insufficient balance",
-                        "type": "billing_error",
-                        "code": "insufficient_balance"
-                    }
-                }))
-                .into_response();
-            }
+    match QUOTA_CHECKER
+        .check_quota(&user, &request.model, Some(&api_key), &db)
+        .await
+    {
+        QuotaCheckResult::Allowed => {}
+        QuotaCheckResult::RateLimited { retry_after_secs } => {
+            return Json(json!({
+                "error": {
+                    "message": "Rate limit exceeded",
+                    "type": "rate_limit_error",
+                    "code": "rate_limit_exceeded",
+                    "retry_after": retry_after_secs
+                }
+            }))
+            .into_response();
+        }
+        QuotaCheckResult::QuotaExceeded { limit, used } => {
+            return Json(json!({
+                "error": {
+                    "message": format!("Monthly quota exceeded (used: {}, limit: {})", used, limit),
+                    "type": "quota_exceeded_error",
+                    "code": "quota_exceeded"
+                }
+            }))
+            .into_response();
+        }
+        QuotaCheckResult::ModelNotAllowed { model } => {
+            return Json(json!({
+                "error": {
+                    "message": format!("Model '{}' is not allowed for this API key", model),
+                    "type": "permission_error",
+                    "code": "model_not_allowed"
+                }
+            }))
+            .into_response();
+        }
+        QuotaCheckResult::InsufficientBalance { .. } => {
+            return Json(json!({
+                "error": {
+                    "message": "Insufficient balance",
+                    "type": "billing_error",
+                    "code": "insufficient_balance"
+                }
+            }))
+            .into_response();
         }
     }
 
@@ -360,24 +366,20 @@ async fn chat_completions(
                     .calculate_cost(usage_data.prompt_tokens, usage_data.completion_tokens);
 
                 // Record usage
-                if let Some(uid) = user_id {
-                    if let Some(recorder) = USAGE_RECORDER.get() {
-                        info!("Recording usage for user: {}", uid);
-                        let create_usage = CreateUsage::new(
-                            uid,
-                            api_key_id,
-                            completion.model.clone(),
-                            provider_name.clone(),
-                            usage_data.prompt_tokens,
-                            usage_data.completion_tokens,
-                            cost,
-                        );
-                        recorder.record(create_usage);
-                    } else {
-                        error!("USAGE_RECORDER not initialized!");
-                    }
+                if let Some(recorder) = USAGE_RECORDER.get() {
+                    info!("Recording usage for user: {}", user_id);
+                    let create_usage = CreateUsage::new(
+                        user_id,
+                        Some(api_key_id),
+                        completion.model.clone(),
+                        provider_name.clone(),
+                        usage_data.prompt_tokens,
+                        usage_data.completion_tokens,
+                        cost,
+                    );
+                    recorder.record(create_usage);
                 } else {
-                    info!("Skipping usage recording: no user_id (unauthenticated request)");
+                    error!("USAGE_RECORDER not initialized!");
                 }
 
                 info!(
@@ -394,8 +396,8 @@ async fn chat_completions(
             ChatCompletionResponse::Stream(stream) => {
                 let event_stream = stream_to_sse_with_usage(
                     stream,
-                    user_id,
-                    api_key_id,
+                    Some(user_id),
+                    Some(api_key_id),
                     model_instance,
                     provider_name,
                 );
@@ -419,23 +421,46 @@ async fn chat_completions(
 }
 
 /// Extract auth context and fetch user/api_key from database
+/// LLM endpoints only accept API Key authentication
 async fn extract_auth_context(
     auth: &AuthContext,
     db: &DatabaseService,
-) -> std::result::Result<(Option<Uuid>, Option<Uuid>, Option<User>, Option<ApiKey>), Response> {
+) -> std::result::Result<(Uuid, Uuid, User, ApiKey), Response> {
     match auth {
-        AuthContext::User(claims) => {
-            let user = db.find_user_by_id(claims.sub).await.ok().flatten();
-            Ok((Some(claims.sub), None, user, None))
+        AuthContext::User(_) => {
+            Err(Json(json!({
+                "error": {
+                    "message": "JWT authentication is not allowed for LLM endpoints. Please use an API key.",
+                    "type": "authentication_error",
+                    "code": "jwt_not_allowed"
+                }
+            }))
+            .into_response())
         }
         AuthContext::ApiKey { user_id, api_key_id } => {
             let user = db.find_user_by_id(*user_id).await.ok().flatten();
             let api_key = db.get_api_key_by_id(*api_key_id).await.ok().flatten();
-            Ok((Some(*user_id), Some(*api_key_id), user, api_key))
+            match (user, api_key) {
+                (Some(user), Some(api_key)) => Ok((*user_id, *api_key_id, user, api_key)),
+                _ => Err(Json(json!({
+                    "error": {
+                        "message": "Invalid API key",
+                        "type": "authentication_error",
+                        "code": "invalid_api_key"
+                    }
+                }))
+                .into_response()),
+            }
         }
         AuthContext::None => {
-            // Allow unauthenticated requests but no usage tracking/quota enforcement
-            Ok((None, None, None, None))
+            Err(Json(json!({
+                "error": {
+                    "message": "API key required. Please provide an API key via Authorization header or x-api-key header.",
+                    "type": "authentication_error",
+                    "code": "api_key_required"
+                }
+            }))
+            .into_response())
         }
     }
 }
@@ -593,45 +618,49 @@ async fn anthropic_messages(
     };
 
     // Quota check
-    if let Some(ref user) = user {
-        match QUOTA_CHECKER.check_quota(user, &request.model, api_key.as_ref(), &db).await {
-            QuotaCheckResult::Allowed => {}
-            QuotaCheckResult::RateLimited { retry_after_secs } => {
-                return Json(AnthropicErrorResponse {
-                    error: AnthropicErrorDetail {
-                        r#type: "rate_limit_error".to_string(),
-                        message: format!("Rate limit exceeded. Retry after {} seconds.", retry_after_secs),
-                    },
-                })
-                .into_response();
-            }
-            QuotaCheckResult::QuotaExceeded { limit, used } => {
-                return Json(AnthropicErrorResponse {
-                    error: AnthropicErrorDetail {
-                        r#type: "quota_exceeded".to_string(),
-                        message: format!("Monthly quota exceeded (used: {}, limit: {})", used, limit),
-                    },
-                })
-                .into_response();
-            }
-            QuotaCheckResult::ModelNotAllowed { model } => {
-                return Json(AnthropicErrorResponse {
-                    error: AnthropicErrorDetail {
-                        r#type: "permission_error".to_string(),
-                        message: format!("Model '{}' is not allowed for this API key", model),
-                    },
-                })
-                .into_response();
-            }
-            QuotaCheckResult::InsufficientBalance { .. } => {
-                return Json(AnthropicErrorResponse {
-                    error: AnthropicErrorDetail {
-                        r#type: "billing_error".to_string(),
-                        message: "Insufficient balance".to_string(),
-                    },
-                })
-                .into_response();
-            }
+    match QUOTA_CHECKER
+        .check_quota(&user, &request.model, Some(&api_key), &db)
+        .await
+    {
+        QuotaCheckResult::Allowed => {}
+        QuotaCheckResult::RateLimited { retry_after_secs } => {
+            return Json(AnthropicErrorResponse {
+                error: AnthropicErrorDetail {
+                    r#type: "rate_limit_error".to_string(),
+                    message: format!(
+                        "Rate limit exceeded. Retry after {} seconds.",
+                        retry_after_secs
+                    ),
+                },
+            })
+            .into_response();
+        }
+        QuotaCheckResult::QuotaExceeded { limit, used } => {
+            return Json(AnthropicErrorResponse {
+                error: AnthropicErrorDetail {
+                    r#type: "quota_exceeded".to_string(),
+                    message: format!("Monthly quota exceeded (used: {}, limit: {})", used, limit),
+                },
+            })
+            .into_response();
+        }
+        QuotaCheckResult::ModelNotAllowed { model } => {
+            return Json(AnthropicErrorResponse {
+                error: AnthropicErrorDetail {
+                    r#type: "permission_error".to_string(),
+                    message: format!("Model '{}' is not allowed for this API key", model),
+                },
+            })
+            .into_response();
+        }
+        QuotaCheckResult::InsufficientBalance { .. } => {
+            return Json(AnthropicErrorResponse {
+                error: AnthropicErrorDetail {
+                    r#type: "billing_error".to_string(),
+                    message: "Insufficient balance".to_string(),
+                },
+            })
+            .into_response();
         }
     }
 
@@ -639,12 +668,16 @@ async fn anthropic_messages(
     let is_stream = request.stream.unwrap_or(false);
 
     if is_stream {
-        match model_instance.provider.anthropic_messages_stream(request).await {
+        match model_instance
+            .provider
+            .anthropic_messages_stream(request)
+            .await
+        {
             Ok(stream) => {
                 let event_stream = anthropic_stream_to_sse_with_usage(
                     stream,
-                    user_id,
-                    api_key_id,
+                    Some(user_id),
+                    Some(api_key_id),
                     model_instance,
                     provider_name,
                 );
@@ -667,35 +700,27 @@ async fn anthropic_messages(
         match model_instance.provider.anthropic_messages(request).await {
             Ok(response) => {
                 // Record usage
-                if let Some(uid) = user_id {
-                    if let Some(recorder) = USAGE_RECORDER.get() {
-                        info!("Recording Anthropic usage for user: {}", uid);
-                        let cost = model_instance.calculate_cost(
-                            response.usage.input_tokens,
-                            response.usage.output_tokens,
-                        );
-                        let create_usage = CreateUsage::new(
-                            uid,
-                            api_key_id,
-                            response.model.clone(),
-                            provider_name,
-                            response.usage.input_tokens,
-                            response.usage.output_tokens,
-                            cost,
-                        );
-                        recorder.record(create_usage);
-                    } else {
-                        error!("USAGE_RECORDER not initialized!");
-                    }
+                if let Some(recorder) = USAGE_RECORDER.get() {
+                    info!("Recording Anthropic usage for user: {}", user_id);
+                    let cost = model_instance
+                        .calculate_cost(response.usage.input_tokens, response.usage.output_tokens);
+                    let create_usage = CreateUsage::new(
+                        user_id,
+                        Some(api_key_id),
+                        response.model.clone(),
+                        provider_name,
+                        response.usage.input_tokens,
+                        response.usage.output_tokens,
+                        cost,
+                    );
+                    recorder.record(create_usage);
                 } else {
-                    info!("Skipping Anthropic usage recording: no user_id (unauthenticated request)");
+                    error!("USAGE_RECORDER not initialized!");
                 }
 
                 info!(
                     "Completed Anthropic request - model: {}, tokens: {}/{}",
-                    response.model,
-                    response.usage.input_tokens,
-                    response.usage.output_tokens
+                    response.model, response.usage.input_tokens, response.usage.output_tokens
                 );
                 Json(response).into_response()
             }
@@ -822,9 +847,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let _ = USAGE_RECORDER.set(Arc::new(UsageRecorder::new(db_service)));
     info!("Usage recorder initialized");
 
-    let app_state = AppState {
-        db: db.clone(),
-    };
+    let app_state = AppState { db: db.clone() };
 
     let addr = format!("{}:{}", &settings.basic.host, &settings.basic.port);
     info!("Starting server on http://{}", addr);

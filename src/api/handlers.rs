@@ -98,9 +98,9 @@ pub async fn get_current_user(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
 ) -> Result<Json<UserInfo>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
     let user = db
-        .find_user_by_id(user_id)
+        .find_user_by_id(claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -120,9 +120,9 @@ pub async fn validate_token(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
 ) -> Result<Json<ValidateTokenResponse>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
     let user = db
-        .find_user_by_id(user_id)
+        .find_user_by_id(claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -183,10 +183,10 @@ pub async fn update_profile(
     State(db): State<Db>,
     Json(_req): Json<UpdateProfileRequest>,
 ) -> Result<Json<UserInfo>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
     // For now, just return current user - profile update can be implemented later
     let user = db
-        .find_user_by_id(user_id)
+        .find_user_by_id(claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -202,9 +202,9 @@ pub async fn list_available_models(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
 ) -> Result<Json<Vec<ModelInfo>>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
     let user = db
-        .find_user_by_id(user_id)
+        .find_user_by_id(claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -226,13 +226,13 @@ pub async fn create_api_key(
     State(db): State<Db>,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> Result<Json<ApiKeyInfo>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
     let expires_at = req
         .expires_in_days
         .map(|days| Utc::now() + Duration::days(days));
 
     let create_api_key = CreateApiKey::generate(
-        user_id,
+        claims.sub,
         req.name,
         expires_at,
         req.rate_limit_rpm,
@@ -253,9 +253,9 @@ pub async fn list_api_keys(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
 ) -> Result<Json<Vec<ApiKeyInfo>>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
     let keys = db
-        .list_user_api_keys(user_id)
+        .list_user_api_keys(claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -269,8 +269,8 @@ pub async fn revoke_api_key(
     State(db): State<Db>,
     Path(key_id): Path<Uuid>,
 ) -> Result<Json<()>, StatusCode> {
-    let user_id = auth.require_auth()?;
-    db.delete_api_key(key_id, user_id)
+    let claims = auth.require_user()?;
+    db.delete_api_key(key_id, claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -292,13 +292,13 @@ pub async fn get_usage(
     State(db): State<Db>,
     Query(query): Query<UsageQuery>,
 ) -> Result<Json<Vec<UsageInfo>>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
     // Default to last 30 days if not specified
     let end = query.end.unwrap_or_else(Utc::now);
     let start = query.start.unwrap_or_else(|| end - Duration::days(30));
 
     let usage = db
-        .get_usage_summary(user_id, start, end)
+        .get_usage_summary(claims.sub, start, end)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -320,19 +320,19 @@ pub async fn get_usage_stats(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
 ) -> Result<Json<DashboardStats>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
     // Get usage stats for last 30 days
     let end = Utc::now();
     let start = end - Duration::days(30);
 
     let usage_stats = db
-        .get_usage_stats(user_id, start, end)
+        .get_usage_stats(claims.sub, start, end)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Count active API keys
     let api_keys = db
-        .list_user_api_keys(user_id)
+        .list_user_api_keys(claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -375,10 +375,10 @@ pub async fn get_api_key_stats(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
 ) -> Result<Json<Vec<ApiKeyStats>>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
 
     let stats = db
-        .get_api_key_usage_stats(user_id)
+        .get_api_key_usage_stats(claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -393,10 +393,10 @@ pub async fn get_my_balance(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
 ) -> Result<Json<UserBalanceInfo>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
 
     let balance = db
-        .get_user_balance(user_id)
+        .get_user_balance(claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -412,10 +412,10 @@ pub async fn list_billings(
     Extension(auth): Extension<AuthContext>,
     State(db): State<Db>,
 ) -> Result<Json<Vec<BillingInfo>>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
 
     let billings = db
-        .list_user_billings(user_id)
+        .list_user_billings(claims.sub)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -429,7 +429,7 @@ pub async fn get_billing(
     State(db): State<Db>,
     Path(billing_id): Path<Uuid>,
 ) -> Result<Json<BillingInfo>, StatusCode> {
-    let user_id = auth.require_auth()?;
+    let claims = auth.require_user()?;
 
     let billing = db
         .get_billing(billing_id)
@@ -438,7 +438,7 @@ pub async fn get_billing(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // Verify ownership
-    if billing.user_id != user_id {
+    if billing.user_id != claims.sub {
         return Err(StatusCode::FORBIDDEN);
     }
 

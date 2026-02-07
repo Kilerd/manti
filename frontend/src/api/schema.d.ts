@@ -120,6 +120,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users/{user_id}/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get User Balance
+         * @description Get user balance (admin only)
+         */
+        get: operations["get_user_balance"];
+        put?: never;
+        /**
+         * Add User Balance
+         * @description Add balance to a user account (admin only, for top-up)
+         */
+        post: operations["add_user_balance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/users/{user_id}/groups": {
         parameters: {
             query?: never;
@@ -178,6 +202,26 @@ export interface paths {
          * @description Create a new API key
          */
         post: operations["create_api_key"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api-keys/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Api Key Stats
+         * @description Get usage statistics for all API keys of the authenticated user
+         */
+        get: operations["get_api_key_stats"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -424,6 +468,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/user/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Balance
+         * @description Get current user's balance
+         */
+        get: operations["get_my_balance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/user/me": {
         parameters: {
             query?: never;
@@ -513,6 +577,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        aaa?: string | null;
                         created_at: string;
                         display_name?: string | null;
                         /** Format: uuid */
@@ -734,6 +799,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        aaa?: string | null;
                         created_at: string;
                         display_name?: string | null;
                         /** Format: uuid */
@@ -788,6 +854,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        aaa?: string | null;
                         created_at: string;
                         display_name?: string | null;
                         /** Format: uuid */
@@ -833,6 +900,78 @@ export interface operations {
                         user_groups: string[];
                         username: string;
                     }[];
+                };
+            };
+        };
+    };
+    get_user_balance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description default return */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: decimal */
+                        balance: string;
+                        /** Format: decimal */
+                        credit_limit: string;
+                        /** Format: decimal */
+                        lifetime_usage: string;
+                        updated_at: string;
+                        /** Format: uuid */
+                        user_id: string;
+                    };
+                };
+            };
+        };
+    };
+    add_user_balance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Request to add balance to a user account */
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: decimal */
+                    amount: string;
+                };
+            };
+        };
+        responses: {
+            /** @description default return */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: decimal */
+                        balance: string;
+                        /** Format: decimal */
+                        credit_limit: string;
+                        /** Format: decimal */
+                        lifetime_usage: string;
+                        updated_at: string;
+                        /** Format: uuid */
+                        user_id: string;
+                    };
                 };
             };
         };
@@ -987,6 +1126,33 @@ export interface operations {
                         name: string;
                         rate_limit_rpm?: number | null;
                     };
+                };
+            };
+        };
+    };
+    get_api_key_stats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description default return */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        api_key_id: string;
+                        api_key_name: string;
+                        total_cost: number;
+                        total_requests: number;
+                        total_tokens: number;
+                    }[];
                 };
             };
         };
@@ -1295,6 +1461,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        aaa?: string | null;
                         created_at: string;
                         display_name?: string | null;
                         /** Format: uuid */
@@ -1375,6 +1542,36 @@ export interface operations {
                         total_cost: number;
                         total_requests: number;
                         total_tokens: number;
+                    };
+                };
+            };
+        };
+    };
+    get_my_balance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description default return */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: decimal */
+                        balance: string;
+                        /** Format: decimal */
+                        credit_limit: string;
+                        /** Format: decimal */
+                        lifetime_usage: string;
+                        updated_at: string;
+                        /** Format: uuid */
+                        user_id: string;
                     };
                 };
             };

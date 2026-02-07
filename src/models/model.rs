@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use conservator::{Domain, Creatable};
+use conservator::{Creatable, Domain};
 use gotcha::Schematic;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
