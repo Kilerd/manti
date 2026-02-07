@@ -16,16 +16,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { listUsers, updateUserGroups, type AdminUser } from "@/api";
+import { listUsers, updateUserGroups, getUserBalance, addUserBalance, type AdminUser, type UserBalance } from "@/api";
 import { toast } from "@/hooks/use-toast";
-import { Pencil, X, Check, Shield, User } from "lucide-react";
+import { Pencil, X, Check, Shield, User, Plus } from "lucide-react";
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [balances, setBalances] = useState<Record<string, UserBalance>>({});
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editGroups, setEditGroups] = useState("");
   const [saving, setSaving] = useState(false);
+  const [topUpUserId, setTopUpUserId] = useState<string | null>(null);
+  const [topUpAmount, setTopUpAmount] = useState("");
 
   useEffect(() => {
     fetchUsers();
@@ -34,7 +37,26 @@ export default function AdminUsers() {
   const fetchUsers = async () => {
     try {
       const response = await listUsers({});
-      setUsers(response.data ?? []);
+      const userList = response.data ?? [];
+      setUsers(userList);
+
+      // Fetch balances for all users
+      const balancePromises = userList.map(async (user) => {
+        try {
+          const balance = await getUserBalance(user.id);
+          return [user.id, balance] as const;
+        } catch {
+          return [user.id, null] as const;
+        }
+      });
+      const balanceResults = await Promise.all(balancePromises);
+      const balanceMap: Record<string, UserBalance> = {};
+      for (const [id, balance] of balanceResults) {
+        if (balance) {
+          balanceMap[id] = balance;
+        }
+      }
+      setBalances(balanceMap);
     } catch (err) {
       console.error("Failed to fetch users:", err);
       toast({
@@ -86,6 +108,43 @@ export default function AdminUsers() {
     }
   };
 
+  const handleTopUp = async (userId: string) => {
+    if (!topUpAmount || parseFloat(topUpAmount) <= 0) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid amount.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const updatedBalance = await addUserBalance(userId, topUpAmount);
+      setBalances((prev) => ({ ...prev, [userId]: updatedBalance }));
+      toast({
+        title: "Success",
+        description: `Added $${topUpAmount} to user's balance.`,
+      });
+      setTopUpUserId(null);
+      setTopUpAmount("");
+    } catch (err) {
+      console.error("Failed to add balance:", err);
+      toast({
+        title: "Error",
+        description: "Failed to add balance.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelTopUp = () => {
+    setTopUpUserId(null);
+    setTopUpAmount("");
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -123,6 +182,7 @@ export default function AdminUsers() {
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Groups</TableHead>
+                  <TableHead>Balance</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -173,6 +233,54 @@ export default function AdminUsers() {
                               No groups
                             </span>
                           )}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {topUpUserId === user.id ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={topUpAmount}
+                            onChange={(e) => setTopUpAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="h-8 w-24"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={cancelTopUp}
+                            disabled={saving}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-green-600"
+                            onClick={() => handleTopUp(user.id)}
+                            disabled={saving}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono">
+                            ${parseFloat(balances[user.id]?.balance ?? "0").toFixed(2)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => setTopUpUserId(user.id)}
+                            title="Add balance"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
                         </div>
                       )}
                     </TableCell>

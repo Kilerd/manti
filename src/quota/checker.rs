@@ -45,7 +45,7 @@ impl QuotaChecker {
         user: &User,
         model: &str,
         api_key: Option<&ApiKey>,
-        _db: &DatabaseService,
+        db: &DatabaseService,
     ) -> QuotaCheckResult {
         // 1. Check model allowlist (if API key has restrictions)
         if let Some(key) = api_key {
@@ -75,15 +75,34 @@ impl QuotaChecker {
             }
         }
 
-        // 4. Balance check could be added here for prepaid model
-        // if let Ok(Some(balance)) = db.get_user_balance(user.id).await {
-        //     if balance.balance <= Decimal::ZERO && balance.credit_limit <= Decimal::ZERO {
-        //         return QuotaCheckResult::InsufficientBalance {
-        //             balance: balance.balance,
-        //             required: Decimal::ZERO,
-        //         };
-        //     }
-        // }
+        // 4. Balance check for prepaid model (required)
+        // All users should have a balance record (created at registration)
+        match db.get_user_balance(user.id).await {
+            Ok(Some(balance)) => {
+                if balance.balance <= Decimal::ZERO && balance.credit_limit <= Decimal::ZERO {
+                    return QuotaCheckResult::InsufficientBalance {
+                        balance: balance.balance,
+                        required: Decimal::ZERO,
+                    };
+                }
+            }
+            Ok(None) => {
+                // Defensive: should not happen as balance is created with user
+                tracing::error!("User {} has no balance record", user.id);
+                return QuotaCheckResult::InsufficientBalance {
+                    balance: Decimal::ZERO,
+                    required: Decimal::ZERO,
+                };
+            }
+            Err(e) => {
+                tracing::warn!("Failed to check user balance: {}", e);
+                // On DB error, fail closed (reject)
+                return QuotaCheckResult::InsufficientBalance {
+                    balance: Decimal::ZERO,
+                    required: Decimal::ZERO,
+                };
+            }
+        }
 
         QuotaCheckResult::Allowed
     }

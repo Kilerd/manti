@@ -1,6 +1,6 @@
 use crate::models::{
     api_key::{ApiKey, CreateApiKey},
-    billing::{Billing, CreateBilling},
+    billing::{Billing, CreateBilling, UserBalance},
     usage::{Usage, CreateUsage},
     user::{User, CreateUser},
     provider_config::{ProviderConfig, CreateProviderConfig, UsageStats, ModelUsageStats, ProviderUsageStats},
@@ -43,13 +43,39 @@ impl DatabaseService {
 
     // User operations
 
-    /// Create a new user
+    /// Create a new user with initial balance record (transactional)
     pub async fn create_user(&self, create_user: CreateUser) -> crate::Result<User> {
-        let user_id = create_user
-            .insert::<User>()
-            .returning_pk(&*self.pool)
+        let conn = self.pool.get().await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        // Use CTE to atomically create user and balance in a single statement
+        let query = r#"
+            WITH new_user AS (
+                INSERT INTO users (email, username, password_hash, is_active, is_admin, user_groups)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING id
+            )
+            INSERT INTO user_balances (user_id)
+            SELECT id FROM new_user
+            RETURNING (SELECT id FROM new_user)
+        "#;
+
+        let row = conn
+            .query_one(
+                query,
+                &[
+                    &create_user.email,
+                    &create_user.username,
+                    &create_user.password_hash,
+                    &create_user.is_active,
+                    &create_user.is_admin,
+                    &create_user.user_groups,
+                ],
+            )
             .await
             .map_err(|e| crate::MantiError::Database(e))?;
+
+        let user_id: Uuid = row.get(0);
 
         User::fetch_one_by_pk(&user_id, &*self.pool)
             .await
@@ -753,5 +779,65 @@ impl DatabaseService {
             .map_err(|e| crate::MantiError::Database(e))?;
 
         Ok(row.get(0))
+    }
+
+    // User balance operations (prepaid model)
+
+    /// Get user balance (for prepaid model)
+    pub async fn get_user_balance(&self, user_id: Uuid) -> crate::Result<Option<UserBalance>> {
+        match UserBalance::fetch_one_by_pk(&user_id, &*self.pool).await {
+            Ok(balance) => Ok(Some(balance)),
+            Err(conservator::Error::TooManyRows(0)) => Ok(None),
+            Err(e) => Err(crate::MantiError::Database(e)),
+        }
+    }
+
+    /// Deduct from user balance (atomic operation)
+    /// Returns the new balance after deduction, or None if user has no balance record
+    pub async fn deduct_balance(&self, user_id: Uuid, amount: Decimal) -> crate::Result<Option<Decimal>> {
+        let conn = self.pool.get().await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        let query = r#"
+            UPDATE user_balances
+            SET balance = balance - $2,
+                lifetime_usage = lifetime_usage + $2,
+                updated_at = NOW()
+            WHERE user_id = $1
+            RETURNING balance
+        "#;
+
+        let rows = conn.query(query, &[&user_id, &amount])
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Ok(rows.first().map(|r| r.get(0)))
+    }
+
+    /// Add to user balance (admin operation for top-up)
+    /// Returns the updated UserBalance, or None if user has no balance record
+    pub async fn add_balance(&self, user_id: Uuid, amount: Decimal) -> crate::Result<Option<UserBalance>> {
+        let conn = self.pool.get().await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        let query = r#"
+            UPDATE user_balances
+            SET balance = balance + $2,
+                updated_at = NOW()
+            WHERE user_id = $1
+            RETURNING user_id, balance, credit_limit, lifetime_usage, updated_at
+        "#;
+
+        let rows = conn.query(query, &[&user_id, &amount])
+            .await
+            .map_err(|e| crate::MantiError::Database(e))?;
+
+        Ok(rows.first().map(|r| UserBalance {
+            user_id: r.get(0),
+            balance: r.get(1),
+            credit_limit: r.get(2),
+            lifetime_usage: r.get(3),
+            updated_at: r.get(4),
+        }))
     }
 }

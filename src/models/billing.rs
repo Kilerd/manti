@@ -121,3 +121,31 @@ pub struct UserBalance {
     pub lifetime_usage: Decimal,
     pub updated_at: DateTime<Utc>,
 }
+
+/// User balance info for API responses
+#[derive(Debug, Clone, Serialize, Schematic)]
+pub struct UserBalanceInfo {
+    pub user_id: Uuid,
+    pub balance: Decimal,
+    pub credit_limit: Decimal,
+    pub lifetime_usage: Decimal,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<UserBalance> for UserBalanceInfo {
+    fn from(b: UserBalance) -> Self {
+        Self {
+            user_id: b.user_id,
+            balance: b.balance,
+            credit_limit: b.credit_limit,
+            lifetime_usage: b.lifetime_usage,
+            updated_at: b.updated_at,
+        }
+    }
+}
+
+/// Request to add balance to a user account
+#[derive(Debug, Clone, Deserialize, Schematic)]
+pub struct AddBalanceRequest {
+    pub amount: Decimal,
+}

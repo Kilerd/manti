@@ -1,6 +1,7 @@
 use crate::{
     auth::AuthContext,
     models::{
+        billing::{AddBalanceRequest, UserBalanceInfo},
         model::{CreateModel, CreateModelRequest, ModelInfo, UpdateModelRequest},
         provider_config::{
             CreateProviderConfig, CreateProviderConfigRequest, ProviderConfig, ProviderConfigInfo,
@@ -362,4 +363,61 @@ pub async fn get_usage_stats(
         .map_err(|e| e.to_status_code())?;
 
     Ok(Json(stats))
+}
+
+// Balance management handlers
+
+/// Get user balance (admin only)
+#[gotcha::api(group = "Admin - Balance")]
+pub async fn get_user_balance(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Db>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<UserBalanceInfo>, StatusCode> {
+    require_admin(&auth)?;
+
+    let balance = db
+        .get_user_balance(user_id)
+        .await
+        .map_err(|e| e.to_status_code())?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(Json(balance.into()))
+}
+
+/// Add balance to a user account (admin only, for top-up)
+#[gotcha::api(group = "Admin - Balance")]
+pub async fn add_user_balance(
+    Extension(auth): Extension<AuthContext>,
+    State(db): State<Db>,
+    Path(user_id): Path<Uuid>,
+    Json(req): Json<AddBalanceRequest>,
+) -> Result<Json<UserBalanceInfo>, StatusCode> {
+    require_admin(&auth)?;
+
+    // Verify the user exists
+    db.find_user_by_id(user_id)
+        .await
+        .map_err(|e| e.to_status_code())?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Validate amount is positive
+    if req.amount <= Decimal::ZERO {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let balance = db
+        .add_balance(user_id, req.amount)
+        .await
+        .map_err(|e| e.to_status_code())?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    tracing::info!(
+        "Admin added {} to user {} balance, new balance: {}",
+        req.amount,
+        user_id,
+        balance.balance
+    );
+
+    Ok(Json(balance.into()))
 }

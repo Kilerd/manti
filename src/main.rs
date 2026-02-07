@@ -875,6 +875,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .get("/admin/users", admin::list_users)
         .put("/admin/users/:user_id/groups", admin::update_user_groups)
         .get("/admin/users/:user_id/usage", admin::get_usage_stats)
+        .get("/admin/users/:user_id/balance", admin::get_user_balance)
+        .post("/admin/users/:user_id/balance", admin::add_user_balance)
         .layer(gotcha::axum::middleware::from_fn_with_state(
             db,
             auth_middleware,

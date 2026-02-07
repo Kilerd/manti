@@ -65,6 +65,43 @@ export const deleteModel = fetcher.path("/admin/models/{id}").method("delete").c
 export const listUsers = fetcher.path("/admin/users").method("get").create();
 export const updateUserGroups = fetcher.path("/admin/users/{user_id}/groups").method("put").create();
 
+// ============ Admin - Balance ============
+export interface UserBalance {
+  user_id: string;
+  balance: string;
+  credit_limit: string;
+  lifetime_usage: string;
+  updated_at: string;
+}
+
+export async function getUserBalance(userId: string): Promise<UserBalance> {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/balance`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error("Failed to fetch user balance");
+  }
+  return response.json();
+}
+
+export async function addUserBalance(userId: string, amount: string): Promise<UserBalance> {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/balance`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ amount }),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to add balance");
+  }
+  return response.json();
+}
+
 // ============ Usage API ============
 export const getUsage = fetcher.path("/usage").method("get").create();
 // Note: getUsageStats has duplicate operation name issue in schema,
